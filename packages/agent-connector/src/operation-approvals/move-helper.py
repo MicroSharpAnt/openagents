@@ -8,6 +8,7 @@ import sys
 
 
 def primitive():
+    """Return the native no-overwrite syscall; never fall back to replacement rename."""
     libc = ctypes.CDLL(None, use_errno=True)
     if sys.platform == 'darwin':
         fn, flag = getattr(libc, 'renameatx_np', None), 4  # RENAME_EXCL
@@ -23,6 +24,7 @@ def primitive():
 
 
 def parts(value):
+    """Validate relative components without permitting metadata or parent traversal."""
     if not isinstance(value, str) or not value or value.startswith('/') or '\\' in value or '\x00' in value:
         raise ValueError('Paths must be relative to the configured work root')
     result = value.split('/')
@@ -32,6 +34,10 @@ def parts(value):
 
 
 def directory(parent, components):
+    """Return a caller-owned descriptor reached without following symlinks.
+
+    Close only our duplicate on failure; the borrowed parent remains open.
+    """
     fd = os.dup(parent)
     try:
         for component in components:
@@ -45,10 +51,15 @@ def directory(parent, components):
 
 
 def identity(st):
+    """Capture inode identity and change metadata for approval fingerprints."""
     return [st.st_dev, st.st_ino, st.st_mode, st.st_size, st.st_mtime_ns, st.st_ctime_ns]
 
 
 def fingerprint(parent, name, digest):
+    """Hash names, inode metadata and file bytes through borrowed parent descriptors.
+
+    Each opened child is closed here; concurrent mutations invalidate inspection.
+    """
     if name in ('.codex', '.openagents'):
         raise ValueError('Directories containing runtime configuration cannot move')
     st = os.stat(name, dir_fd=parent, follow_symlinks=False)
@@ -77,6 +88,10 @@ def fingerprint(parent, name, digest):
 execution_started = False
 
 def run(data):
+    """Inspect or execute one exact move, owning all opened directory descriptors.
+
+    The fingerprint binds both parents and the recursive source; execution rechecks it before the native no-overwrite rename.
+    """
     global execution_started
     fn, flag = primitive()
     root = data['root']

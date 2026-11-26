@@ -466,7 +466,7 @@ class CodexAdapter extends BaseAdapter {
 
     // A DM's canonical participant/owner context is authoritative, not sender text.
     // Check every DM (including continuations) before selecting any execution mode.
-    if (String(msgChannel).startsWith('dm:')) {
+    if (BaseAdapter.isHumanAgentDm(msgChannel)) {
       try {
         const api = new ApprovalClient({ endpoint: this.endpoint, network: this.workspaceId, token: this.token, agentName: this.agentName });
         const ctx = await api.context(msgChannel);

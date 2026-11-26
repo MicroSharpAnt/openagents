@@ -58,9 +58,11 @@ def test_claim_waits_for_resume_and_only_executes_once_with_secret_completion(cl
     assert len(token) >= 32
     assert client.post(url + '/claim', json=body, headers=machine(owned)).status_code == 409
     assert 'execution_token' not in client.get(url, params={'network': owned['id']}, headers=_as('mia', owned)).json()['data']
-    result = {'network': owned['id'], 'execution_token': 'wrong', 'status': 'succeeded', 'result': {'moved': True}}
+    result = {'network': owned['id'], 'execution_token': 'wrong', 'status': 'succeeded', 'result': 'Moved a.txt to b.txt'}
     assert client.post(url + '/result', json=result, headers=machine(owned)).status_code == 403
     result['execution_token'] = token
+    for invalid_result in ({'moved': True}, 'x' * 4097):
+        assert client.post(url + '/result', json={**result, 'result': invalid_result}, headers=machine(owned)).status_code == 422
     for _ in range(2):
         assert client.post(url + '/result', json=result, headers=machine(owned)).json()['data']['status'] == 'succeeded'
     assert client.post(url + '/result', json={**result, 'status': 'failed'}, headers=machine(owned)).status_code == 409
