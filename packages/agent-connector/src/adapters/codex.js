@@ -26,6 +26,9 @@ const https = require('https');
 
 const { whereBinary } = require('../paths');
 const BaseAdapter = require('./base');
+const { ApprovalClient } = require('../operation-approvals/client');
+const { OperationExecutor } = require('../operation-approvals/executor');
+const { runControlledCodex } = require('../operation-approvals/codex-runtime');
 const { pendingImport } = require('../session-imports');
 const { redactSecrets, formatAttachmentsForPrompt, decodeConsoleOutput, BENIGN_CLI_OUTPUT, networkErrorText } = require('./utils');
 const { buildOpenclawSystemPrompt } = require('./workspace-prompt');
@@ -461,6 +464,24 @@ class CodexAdapter extends BaseAdapter {
     await this._autoTitleChannel(msgChannel, summary);
     await this.sendStatus(msgChannel, 'thinking...');
 
+    // A DM's canonical participant/owner context is authoritative, not sender text.
+    // Check every DM (including continuations) before selecting any execution mode.
+    if (String(msgChannel).startsWith('dm:')) {
+      try {
+        const api = new ApprovalClient({ endpoint: this.endpoint, network: this.workspaceId, token: this.token, agentName: this.agentName });
+        const ctx = await api.context(msgChannel);
+        if (typeof ctx.required !== 'boolean' || typeof ctx.paused !== 'boolean' || !ctx.owner_email || !ctx.visitor_email) throw new Error('Invalid approval context');
+        if (ctx.paused) return;
+        if (ctx.required) {
+          await this._handleControlledVisitor(msg, msgChannel, api);
+          return;
+        }
+      } catch (error) {
+        await this.sendError(msgChannel, `Visitor operation approval context/runtime unavailable: ${CodexAdapter._redact(error.message)}. Check operation cards for recorded outcomes.`);
+        return;
+      }
+    }
+
     if (this._useCliMode) {
       // Another agent's message, not a workflow step handed on to this one.
       const fromAgent = msg.senderType === 'agent' && !this._isWorkflowHandoff(msg);
@@ -470,6 +491,33 @@ class CodexAdapter extends BaseAdapter {
     } else {
       await this.sendError(msgChannel, 'codex CLI not found. Install with: npm install -g @openai/codex\n\nOr configure OPENAI_API_KEY + OPENAI_BASE_URL for direct API mode.');
     }
+  }
+
+  async _handleControlledVisitor(msg, channel, api) {
+    if (!this._useCliMode || !this._codexBin) throw new Error('Controlled visitor mode requires the local Codex runtime');
+    if (this._stoppedBeforeStart(channel)) return;
+    const identity = require('crypto').createHash('sha256').update(this.workspaceId + '\0' + this.agentName).digest('hex');
+    const executor = new OperationExecutor({ root: this.workingDir, journalDir: path.join(os.homedir(), '.openagents', 'operation-journal', identity), api });
+    const pinned = this.pinnedPromptOpts(channel).glossary;
+    // Do not use _buildSystemContext: the ordinary workspace prompt embeds credentials.
+    // Strip the generic shared-context block whose ask-owner instruction conflicts with
+    // the trusted dynamic approval tool. Keep owner-reviewed content separately.
+    const shared = this._sharedContext?.[channel]?.ctx;
+    const context = [
+      `You are ${this.agentName}. The current conversation is a visitor DM.`,
+      pinned?.content ? `Pinned glossary:\n${pinned.content}` : '',
+      shared?.apply && shared.shared_instructions ? `Owner-reviewed instructions (operation approval is handled by the trusted dynamic tool):\n${shared.shared_instructions}` : '',
+      ...(shared?.apply && Array.isArray(shared.allowed_knowledge) ? shared.allowed_knowledge.map(k => `Allowed knowledge: ${k.title || k.slug || ''}\n${k.content || ''}`) : []),
+    ].filter(Boolean).join('\n\n');
+    const content = msg.originalContent === undefined ? msg.content : msg.originalContent;
+    const result = await runControlledCodex({
+      bin: this._codexBin, root: this.workingDir, env: this.agentEnv || process.env,
+      model: this._effectiveModel(), customProvider: this._customProvider,
+      prompt: `${context}\n\nUser message:\n${content || ''}${(msg.attachments || []).length ? '\nAttachments are not downloaded in controlled visitor mode. Work only with existing files inside the configured root.' : ''}`, executor, sessionId: channel,
+      onProcess: proc => { if (proc) this._channelProcesses[channel] = proc; else delete this._channelProcesses[channel]; },
+    });
+    if (result.responseText) await this.sendResponse(channel, result.responseText);
+    else await this.sendStatus(channel, 'Controlled visitor run completed. Operation outcomes are shown on their approval cards.');
   }
 
   // ------------------------------------------------------------------
