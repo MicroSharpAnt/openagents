@@ -1854,7 +1854,7 @@ export function WorkspaceProvider({
     for (const convo of dmConversations) {
       const id = `dm:${convo.agents[0]},${convo.agents[1]}`;
       if (id === currentSessionId) continue;
-      if (!dmCounterpart(convo.agents, myDmAddress)) continue; // not the viewer's DM
+      if (!convo.canManage && !dmCounterpart(convo.agents, myDmAddress)) continue; // not the viewer's DM
       if (convo.lastMessage.timestamp < cutoff) continue;
       if (unreadSignals[id]?.dms) { unread.add(id); continue; }
       const readAt = lastReadBySession[id];

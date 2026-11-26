@@ -9,9 +9,9 @@ export function dmUnreadCounts(conversations: DMConversation[], me: string, open
   const cutoff = unreadCutoffMs();
   for (const conversation of conversations) {
     const counterpart = dmCounterpart(conversation.agents, me);
-    if (!counterpart) continue;
+    if (!counterpart && !conversation.canManage) continue;
     const id = dmSessionId(...conversation.agents);
-    const canonical = dmSessionId(me, counterpart);
+    const canonical = counterpart ? dmSessionId(me, counterpart) : id;
     if (id === open || canonical === open) continue;
     const marker = Math.max(readAt[id] ?? 0, readAt[canonical] ?? 0);
     // A request started before the user read the DM must not restore its badge.

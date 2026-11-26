@@ -25,7 +25,7 @@ export function useChatSend({ currentSessionId, currentSession, currentUser, age
   currentUser: { id: string; name: string };
   agents: WorkspaceAgent[];
   displayMessages: WorkspaceMessage[];
-  dm: { isDM: boolean; counterpart: string | null; myAddr: string };
+  dm: { isDM: boolean; counterpart: string | null; myAddr: string; ownerConversation?: boolean; paused?: boolean };
   replyTarget: WorkspaceMessage | undefined;
   setReplyTargets: Dispatch<SetStateAction<ReplyTargets>>;
   setOptimisticMessages: SetOptimisticMessages;
@@ -38,7 +38,7 @@ export function useChatSend({ currentSessionId, currentSession, currentUser, age
   setCurrentDraft: (draft: string) => void;
 }) {
   const t = useT();
-  const { isDM, counterpart: dmCounterpart, myAddr } = dm;
+  const { isDM, counterpart: dmCounterpart, myAddr, ownerConversation, paused } = dm;
   return useCallback(
     async (content: string, mentions: string[] = [], files: PendingFile[] = [], mentionedHumans: string[] = [],
       options: { replyTo?: WorkspaceMessage } = {}) => {
@@ -100,7 +100,7 @@ export function useChatSend({ currentSessionId, currentSession, currentUser, age
 
       // Add optimistic messages immediately and scroll to bottom
       // People-only mentions and human DMs do not request an agent response.
-      const expectResponse = expectsAgentResponse({
+      const expectResponse = !paused && !ownerConversation && expectsAgentResponse({
         content, mentions, mentionedHumans, dmCounterpart: isDM ? dmCounterpart : null,
         responseMode: threadPrivacyApplies(currentSessionId) && !currentSessionId.startsWith('routines:') ? currentSession?.responseMode || 'proactive' : undefined,
       });
@@ -127,11 +127,11 @@ export function useChatSend({ currentSessionId, currentSession, currentUser, age
         if (isDM && dmCounterpart) {
           // Direct message — targeted at the counterpart address, not a
           // channel. Attachments/mentions aren't supported in DMs yet.
-          const sent = await workspaceApi.sendDirectMessage(dmCounterpart, content, currentUser.name, currentUser.id, myAddr, replyingTo?.messageId);
+          const sent = await workspaceApi.sendDirectMessage(dmCounterpart, content, currentUser.name, currentUser.id, myAddr, replyingTo?.messageId, ownerConversation ? currentSessionId : undefined);
           setOptimisticMessages(prev => acknowledgeMessage(prev, userOptimisticMsg.messageId, loadingOptimisticMsg.messageId, sent, loadingOptimisticMsg));
           // A legacy `human:user` conversation: the new message is stored under
           // the viewer's own address, so follow it to the canonical session.
-          const canonical = dmSessionId(myAddr, dmCounterpart);
+          const canonical = ownerConversation ? currentSessionId : dmSessionId(myAddr, dmCounterpart);
           if (canonical !== currentSessionId) {
             setOptimisticMessages((prev) => prev.filter((m) => m.sessionId !== currentSessionId));
             setCurrentSessionId(canonical);
@@ -209,6 +209,6 @@ export function useChatSend({ currentSessionId, currentSession, currentUser, age
         }
       }
     },
-    [replyTarget, currentSessionId, currentUser.id, currentUser.name, forceRefresh, agents, displayMessages, isDM, dmCounterpart, myAddr, setCurrentSessionId, currentSession?.participants, currentSession?.master, currentSession?.responseMode, currentSession?.humanCount] // eslint-disable-line react-hooks/exhaustive-deps
+    [ownerConversation, paused, replyTarget, currentSessionId, currentUser.id, currentUser.name, forceRefresh, agents, displayMessages, isDM, dmCounterpart, myAddr, setCurrentSessionId, currentSession?.participants, currentSession?.master, currentSession?.responseMode, currentSession?.humanCount] // eslint-disable-line react-hooks/exhaustive-deps
   );
 }

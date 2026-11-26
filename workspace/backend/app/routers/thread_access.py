@@ -482,7 +482,7 @@ class ThreadLinkRequest(BaseModel):
     session_id: str
 
 
-def _direct_link_key(ctx, value):
+def _direct_link_key(ctx, value, db=None):
     from app.routers.events import _dm_addresses, _dm_viewer_scope
     if not value.startswith('dm:'):
         return None
@@ -493,7 +493,7 @@ def _direct_link_key(ctx, value):
         return None
     # Apply the same participant/legacy visibility rule as direct-message reads.
     if _dm_viewer_scope(ctx.viewer):
-        mine = _dm_addresses(ctx.viewer) or []
+        mine = _dm_addresses(ctx.viewer, db, ctx.wid) or []
         has_person = any(p.startswith('human:') and '@' in p for p in pair)
         if has_person and not any(p in mine for p in pair):
             return None
@@ -513,7 +513,7 @@ def get_thread_link(body: ThreadLinkRequest, db: Session = Depends(get_db),
         if channel is None or not can_view_channel(db, ctx.wid, ctx.viewer, channel):
             return json_response(ResponseCode.NOT_FOUND, 'Thread not found')
         return success_response({'id': str(channel.id), 'session_id': channel.name})
-    key = _direct_link_key(ctx, body.session_id)
+    key = _direct_link_key(ctx, body.session_id, db)
     if key is None:
         return json_response(ResponseCode.NOT_FOUND, 'Thread not found')
     query = select(DirectThreadLink).where(DirectThreadLink.workspace_id == ctx.wid, DirectThreadLink.session_key == key)
@@ -546,7 +546,7 @@ def resolve_thread_link(thread_id: str, network: str = Query(...), db: Session =
     if channel is not None and can_view_channel(db, ctx.wid, ctx.viewer, channel):
         return success_response({'id': thread_id, 'session_id': channel.name})
     link = db.execute(select(DirectThreadLink).where(DirectThreadLink.id == thread_id, DirectThreadLink.workspace_id == ctx.wid)).scalar_one_or_none()
-    if link is not None and _direct_link_key(ctx, link.session_key):
+    if link is not None and _direct_link_key(ctx, link.session_key, db):
         return success_response({'id': thread_id, 'session_id': link.session_key})
     return json_response(ResponseCode.NOT_FOUND, 'Thread not found')
 
@@ -573,7 +573,7 @@ def update_direct_preferences(thread_id: str, body: DirectPreferencePatch, db: S
     except ValueError:
         return json_response(ResponseCode.NOT_FOUND, 'Thread not found')
     link = db.execute(select(DirectThreadLink).where(DirectThreadLink.id == thread_id, DirectThreadLink.workspace_id == ctx.wid)).scalar_one_or_none()
-    if link is None or not _direct_link_key(ctx, link.session_key):
+    if link is None or not _direct_link_key(ctx, link.session_key, db):
         return json_response(ResponseCode.NOT_FOUND, 'Thread not found')
     key = {'thread_id': thread_id, 'user_email': ctx.viewer.email}
     pref = db.get(DirectThreadPreference, key)
@@ -650,3 +650,62 @@ def revoke_thread_agent_access(channel: str, agent: str, email: str, network: st
         grantee_kind='human', grantee_id=_norm(email), by=ctx.viewer.email)
     db.commit()
     return success_response({'revoked': True})
+
+
+class ConversationTakeover(BaseModel):
+    network: str
+    session_id: str
+    paused: bool
+
+
+@router.get('/direct-conversations/state')
+def direct_conversation_state(network: str, session_id: str, db: Session = Depends(get_db),
+    x_workspace_token: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
+    from app.services.agent_conversations import conversation_state
+    ctx, err = _load(db, network, x_workspace_token, authorization)
+    if err:
+        return err
+    state = conversation_state(db, ctx.wid, ctx.viewer, session_id)
+    if state is None:
+        return json_response(ResponseCode.NOT_FOUND, 'Conversation not found')
+    return success_response(state)
+
+
+@router.patch('/direct-conversations/takeover')
+def set_conversation_takeover(body: ConversationTakeover, db: Session = Depends(get_db),
+    x_workspace_token: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
+    import json
+    from app import cache
+    from app.models import DirectThreadLink
+    from app.services.agent_conversations import conversation_state, lock_conversation, visitor_pair
+    ctx, err = _load(db, body.network, x_workspace_token, authorization)
+    if err:
+        return err
+    pair = visitor_pair(body.session_id)
+    if not pair:
+        return json_response(ResponseCode.BAD_REQUEST, 'Expected a visitor-agent conversation')
+    key = pair.session_id
+    lock_conversation(db, ctx.wid, key)
+    state = conversation_state(db, ctx.wid, ctx.viewer, key)
+    if not state or not state['can_manage']:
+        return json_response(ResponseCode.FORBIDDEN, 'Only the agent owner can take over or resume')
+    link = db.execute(select(DirectThreadLink).where(DirectThreadLink.workspace_id == ctx.wid,
+        DirectThreadLink.session_key == key)).scalar_one_or_none()
+    if link is None:
+        link = DirectThreadLink(workspace_id=ctx.wid, session_key=key)
+        db.add(link)
+    link.takeover_owner = ctx.viewer.email if body.paused else None
+    notice = Event(type='workspace.direct_conversation.updated', source=pair.agent_address, target=pair.visitor_address,
+        visibility='direct', payload={'session_id': key, 'paused': body.paused},
+        metadata={'target_agents': ['__no_response__']})
+    db.add(EventRecord(id=notice.id, network_id=ctx.wid, type=notice.type, source=notice.source,
+        target=notice.target, visibility='direct', payload=notice.payload, metadata_=notice.metadata,
+        timestamp=notice.timestamp))
+    db.commit()
+    try:
+        cache.publish_event(f'ws:{ctx.wid}:events', json.dumps({'id': notice.id, 'type': notice.type,
+            'source': notice.source, 'target': notice.target, 'visibility': 'direct',
+            'payload': notice.payload, 'metadata': notice.metadata, 'timestamp': notice.timestamp}).encode())
+    except Exception:
+        logger.warning('Could not publish conversation takeover update', exc_info=True)
+    return success_response({**state, 'paused': body.paused})

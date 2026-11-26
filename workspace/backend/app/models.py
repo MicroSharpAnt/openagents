@@ -1906,6 +1906,7 @@ class DirectThreadLink(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     workspace_id = Column(UUID(as_uuid=False), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     session_key = Column(Text, nullable=False)
+    takeover_owner = Column(Text, nullable=True)
     __table_args__ = (UniqueConstraint("workspace_id", "session_key", name="uq_direct_thread_link"),)
 
 

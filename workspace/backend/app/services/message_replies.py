@@ -22,7 +22,8 @@ def attach_reply(event, db, workspace, channel=None):
         same_conversation = original.target == event.target and original.visibility != 'direct'
     else:
         same_conversation = (not original.target.startswith('channel/')
-            and {original.source, original.target} == {event.source, event.target})
+            and {(original.metadata_ or {}).get('dm_agent') or original.source, original.target}
+            == {(event.metadata or {}).get('dm_agent') or event.source, event.target})
     if not same_conversation:
         raise EventRejected('workspace_mod', 'reply_message_unavailable')
     payload = original.payload or {}
@@ -35,6 +36,6 @@ def attach_reply(event, db, workspace, channel=None):
         'sender_address': original.source,
         'content': text[:500],
         'recalled': bool((original.metadata_ or {}).get('recalled')),
-        'thread_id': str(channel.id) if channel else dm_session_id(original.source, original.target),
+        'thread_id': str(channel.id) if channel else dm_session_id((original.metadata_ or {}).get('dm_agent') or original.source, original.target),
     }
     event.metadata['in_reply_to'] = original.id

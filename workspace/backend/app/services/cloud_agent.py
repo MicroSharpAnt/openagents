@@ -695,19 +695,9 @@ def _build_conversation_context(
             # sent to this agent from other people and other DMs.
             if not conversation_source or conversation_source == channel_target:
                 return []
-            scope = and_(
-                EventRecord.visibility == "direct",
-                or_(
-                    and_(
-                        EventRecord.source == conversation_source,
-                        EventRecord.target == channel_target,
-                    ),
-                    and_(
-                        EventRecord.source == channel_target,
-                        EventRecord.target == conversation_source,
-                    ),
-                ),
-            )
+            from app.services.agent_conversations import pair_filter
+            scope = and_(EventRecord.visibility == "direct",
+                         pair_filter(EventRecord.__table__, conversation_source, channel_target))
 
         query = select(EventRecord).where(
             EventRecord.network_id == workspace_id,

@@ -22,10 +22,6 @@ function parseDMSession(sessionId: string | null): [string, string] | null {
   return null;
 }
 
-function normalizeAgentAddress(address: string): string {
-  return address.replace(/^openagents:/, '');
-}
-
 function messageBelongsToSession(
   msg: WorkspaceMessage,
   sessionId: string,
@@ -33,9 +29,7 @@ function messageBelongsToSession(
 ): boolean {
   if (!dmPair) return msg.sessionId === sessionId;
   return (
-    msg.sessionId === sessionId ||
-    dmPair.includes(msg.sessionId) ||
-    dmPair.map(normalizeAgentAddress).includes(normalizeAgentAddress(msg.sessionId))
+    msg.sessionId === sessionId
   );
 }
 

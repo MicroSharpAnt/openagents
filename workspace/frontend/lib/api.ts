@@ -20,6 +20,7 @@ import type {
   AcentaAccount,
   AcentaUsage,
   DMConversation,
+  DirectConversationState,
   EventPollResponse,
   KanbanTask,
   WorkspaceIssue,
@@ -964,6 +965,7 @@ class WorkspaceApi {
     senderId?: string,
     source = 'human:user',
     replyTo?: string,
+    conversation?: string,
   ): Promise<ONMEvent> {
     const isAgent = counterpart.startsWith('openagents:');
     return this.sendEvent({
@@ -979,6 +981,7 @@ class WorkspaceApi {
         sender_name: senderName,
       },
       metadata: {
+        ...(conversation ? { dm_conversation: conversation } : {}),
         target_agents: isAgent
           ? [counterpart.replace(/^openagents:/, '')]
           : ['__no_response__'],
@@ -1968,6 +1971,9 @@ class WorkspaceApi {
     }
     const result = await this.request<{ conversations: Array<{
       agents: [string, string];
+      owner_email?: string | null;
+      can_manage?: boolean;
+      paused?: boolean;
       last_message: { content: string; sender: string; timestamp: number };
       message_count: number;
       pinned?: boolean;
@@ -1977,6 +1983,9 @@ class WorkspaceApi {
     }> }>(`/v1/events/conversations?${params}`);
     return result.conversations.map((c) => ({
       agents: c.agents,
+      ownerEmail: c.owner_email,
+      canManage: c.can_manage,
+      paused: c.paused,
       lastMessage: c.last_message,
       messageCount: c.message_count,
       pinned: c.pinned,
@@ -1984,6 +1993,17 @@ class WorkspaceApi {
       unreadCount: c.unread_count,
       readAt: c.read_at,
     }));
+  }
+
+  async directConversationState(sessionId: string): Promise<DirectConversationState> {
+    const params = new URLSearchParams({ network: this.workspaceId, session_id: sessionId });
+    return this.request<DirectConversationState>(`/v1/direct-conversations/state?${params}`);
+  }
+
+  async setConversationTakeover(sessionId: string, paused: boolean): Promise<DirectConversationState> {
+    return this.request<DirectConversationState>('/v1/direct-conversations/takeover', {
+      method: 'PATCH', body: JSON.stringify({ network: this.workspaceId, session_id: sessionId, paused }),
+    });
   }
 
   /** Poll messages for a DM conversation between two agents. */

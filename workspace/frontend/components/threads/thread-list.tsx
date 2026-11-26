@@ -78,7 +78,7 @@ export function ThreadList() {
   // Keep the viewer's DM history even when the counterpart is offline.
   const visibleDMs = useMemo(() => {
     const filtered = [...dmConversations]
-      .filter(c => !!dmCounterpart(c.agents, me))
+      .filter(c => c.canManage || !!dmCounterpart(c.agents, me))
       .sort((a, b) => b.lastMessage.timestamp - a.lastMessage.timestamp);
     const seen = new Set<string>();
     return filtered.filter((c) => {

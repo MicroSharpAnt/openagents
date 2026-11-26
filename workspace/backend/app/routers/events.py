@@ -267,7 +267,7 @@ def _is_person_address(col):
     return and_(col.startswith("human:"), col.like("%@%"))
 
 
-def _dm_addresses(viewer) -> Optional[list]:
+def _dm_addresses(viewer, db=None, workspace_id=None) -> Optional[list]:
     """Addresses that count as "me" for DM privacy, or None for no filter.
 
     A person: their `human:<email>` (an anonymous visitor: none, so they see
@@ -277,7 +277,14 @@ def _dm_addresses(viewer) -> Optional[list]:
     """
     kind = getattr(viewer, "kind", None)
     if kind == "human":
-        return [f"human:{viewer.email}"] if viewer.email else []
+        addresses = [f"human:{viewer.email}"] if viewer.email else []
+        if db is not None and workspace_id and viewer.email:
+            from app.models import WorkspaceMember
+            addresses += [f"openagents:{name}" for name in db.execute(select(WorkspaceMember.agent_name).where(
+                WorkspaceMember.workspace_id == workspace_id, WorkspaceMember.status != "removed",
+                func.lower(WorkspaceMember.owner_email) == viewer.email.lower(),
+            )).scalars()]
+        return addresses
     if kind == "agent" and getattr(viewer, "agent_name", None):
         out = [f"openagents:{viewer.agent_name}"]
         if getattr(viewer, "owner_email", None):
@@ -300,13 +307,15 @@ def _dm_privacy_clause(viewer_email):
         mine = [a for a in viewer_email if a]
     else:
         mine = [f"human:{viewer_email}"] if viewer_email else []
+    from app.services.agent_conversations import conversation_source
+    source = conversation_source(EventRecord.__table__)
     allowed = [
         EventRecord.visibility.is_(None),
         EventRecord.visibility != "direct",
-        and_(~_is_person_address(EventRecord.source), ~_is_person_address(EventRecord.target)),
+        and_(~_is_person_address(source), ~_is_person_address(EventRecord.target)),
     ]
     if mine:
-        allowed += [EventRecord.source.in_(mine), EventRecord.target.in_(mine)]
+        allowed += [source.in_(mine), EventRecord.target.in_(mine)]
     return or_(*allowed)
 
 
@@ -370,7 +379,7 @@ def send_event(
     if not body.network:
         return json_response(ResponseCode.BAD_REQUEST, "Missing required field: network")
 
-    if body.type == "workspace.thread.collaboration.updated":
+    if body.type in ("workspace.thread.collaboration.updated", "workspace.direct_conversation.updated"):
         return json_response(ResponseCode.FORBIDDEN, "Use the thread collaboration settings endpoint")
 
     # Resolve workspace
@@ -439,6 +448,10 @@ def send_event(
         sender = _viewer or resolve_viewer(db, workspace, x_workspace_token, authorization)
         if sender.kind == "human" and sender.email:
             metadata[ACTING_FOR] = sender.email
+
+    if body.type != "workspace.message.posted":
+        for key in ("dm_agent", "dm_owner", "dm_conversation"):
+            metadata.pop(key, None)
 
     # Build ONM Event
     event = Event(
@@ -907,9 +920,10 @@ def _poll_events_impl(
     # (plus unattributable agent↔agent / legacy ones). The scope joins every
     # cache key below so pages are never shared between people.
     dm_scope = _dm_viewer_scope(viewer)
+    dm_addresses = _dm_addresses(viewer, db, workspace_id)
     # The page also depends on the hidden-thread set. Keying on its digest lets
     # people with the same view share cached pages; any other view gets its own.
-    cache_scope = dm_scope or ""
+    cache_scope = (dm_scope or "") + "|owned=" + ",".join(sorted(dm_addresses or []))
     if hidden_targets:
         cache_scope += "|hidden=" + hashlib.sha1(
             "\n".join(sorted(hidden_targets)).encode("utf-8")
@@ -1017,7 +1031,7 @@ def _poll_events_impl(
         if hidden_targets:
             query = query.where(EventRecord.target.notin_(list(hidden_targets)))
         if dm_scope:
-            query = query.where(_dm_privacy_clause(_dm_addresses(viewer)))
+            query = query.where(_dm_privacy_clause(dm_addresses))
 
         # Filter events to only channels where the agent is a member
         if member:
@@ -1041,13 +1055,11 @@ def _poll_events_impl(
             if len(parts) != 2 or not parts[0] or not parts[1]:
                 return json_response(ResponseCode.BAD_REQUEST, "conversation must be two comma-separated addresses")
             a, b = parts
+            from app.services.agent_conversations import pair_filter
             query = query.where(
                 EventRecord.visibility == "direct",
                 ~EventRecord.target.startswith("channel/"),
-                or_(
-                    and_(EventRecord.source == a, EventRecord.target == b),
-                    and_(EventRecord.source == b, EventRecord.target == a),
-                ),
+                pair_filter(EventRecord.__table__, a, b),
             )
 
         after_position = None
@@ -1342,7 +1354,7 @@ def list_conversations(
         db.rollback()
         from fastapi import HTTPException
         raise HTTPException(503, str(exc), headers={"Retry-After": "5"}) from exc
-    viewer_addresses = _dm_addresses(viewer) if _dm_viewer_scope(viewer) else None
+    viewer_addresses = _dm_addresses(viewer, db, workspace.id) if _dm_viewer_scope(viewer) else None
     pairs = [SimpleNamespace(**row) for row in visible_pairs(all_pairs, viewer_addresses, agent, limit)]
 
     from app.models import DirectThreadLink, DirectThreadPreference
@@ -1359,9 +1371,18 @@ def list_conversations(
             ).where(DirectThreadLink.workspace_id == workspace.id, DirectThreadPreference.user_email == viewer.email)
         ).all()}
     latest_query, unread_query = conversation_detail_queries(
-        workspace.id, pairs, read_markers, (_dm_addresses(viewer) or []) + ["human:user"], unread_cutoff_ms())
+        workspace.id, pairs, read_markers, (viewer_addresses or []) + ["human:user"], unread_cutoff_ms(),
+        sender_addresses=(_dm_addresses(viewer) or []) + ["human:user"])
     latest_by_pair = {(r.agent_a, r.agent_b): r for r in db.execute(latest_query)} if latest_query is not None else {}
     unread_by_pair = {(r.agent_a, r.agent_b): r.unread_count for r in db.execute(unread_query)} if unread_query is not None else {}
+    from app.models import WorkspaceMember
+    owners = {f"openagents:{name}": (email or "").strip().lower() for name, email in db.execute(
+        select(WorkspaceMember.agent_name, WorkspaceMember.owner_email).where(
+            WorkspaceMember.workspace_id == workspace.id, WorkspaceMember.status != "removed"))}
+    session_keys = [f"dm:{row.agent_a},{row.agent_b}" for row in pairs]
+    takeovers = dict(db.execute(select(DirectThreadLink.session_key, DirectThreadLink.takeover_owner).where(
+        DirectThreadLink.workspace_id == workspace.id, DirectThreadLink.session_key.in_(session_keys))).all())
+    from app.services.agent_conversations import visitor_pair, state_fields
     conversations = []
     for row in pairs:
         key = (row.agent_a, row.agent_b)
@@ -1371,7 +1392,10 @@ def list_conversations(
             session_id = f"dm:{row.agent_a},{row.agent_b}"
             last_read = read_markers.get(session_id)
             unread_count = unread_by_pair.get(key, 0) if last_read is not None else None
+            pair = visitor_pair(session_id)
+            owner = owners.get(pair.agent_address) if pair else None
             conversations.append({
+                **state_fields(owner, viewer, takeovers.get(session_id)),
                 "agents": [row.agent_a, row.agent_b],
                 "pinned": bool(preferences.get(session_id) and preferences[session_id].pinned),
                 "starred": bool(preferences.get(session_id) and preferences[session_id].starred),
@@ -1458,7 +1482,7 @@ def _is_person_addr(address) -> bool:
     return isinstance(address, str) and address.startswith("human:") and "@" in address
 
 
-def _event_visible_to(event: dict, viewer_email: Optional[str], hidden_channels) -> bool:
+def _event_visible_to(event: dict, viewer_email: Optional[str], hidden_channels, addresses=()) -> bool:
     """Python twin of `hidden_channel_targets` + `_dm_privacy_clause`.
 
     Events published without a `visibility` field (some producers omit it)
@@ -1479,7 +1503,9 @@ def _event_visible_to(event: dict, viewer_email: Optional[str], hidden_channels)
     vis = event.get("visibility")
     if vis not in (None, "", "direct"):
         return True
-    source = str(event.get("source") or "")
+    source = str((event.get("metadata") or {}).get("dm_agent") or event.get("source") or "")
+    if set(addresses) & {source, target}:
+        return True
     me = f"human:{viewer_email}" if viewer_email else None
     if me and me in (source, target):
         return True
@@ -1508,9 +1534,19 @@ class _StreamVisibility:
         self.viewer = viewer
         self.email = viewer.email
         self.hidden = set(hidden)
+        self.addresses = []
         self._loaded_at = asyncio.get_event_loop().time()
 
     async def maybe_refresh(self, event: dict) -> None:
+        if not str(event.get("target") or "").startswith("channel/"):
+            # Revalidate ownership before every direct event, including transfers.
+            def load_addresses():
+                with SessionLocal() as db:
+                    return _dm_addresses(self.viewer, db, self.workspace_id) or []
+            try:
+                self.addresses = await asyncio.to_thread(load_addresses)
+            except Exception:
+                self.addresses = []  # fail closed for owner-only access
         now = asyncio.get_event_loop().time()
         etype = str(event.get("type") or "")
         if not (etype.startswith("network.channel.") or now - self._loaded_at >= self.REFRESH_SECONDS):
@@ -1522,7 +1558,7 @@ class _StreamVisibility:
         self._loaded_at = now
 
     def allows(self, event: dict) -> bool:
-        return _event_visible_to(event, self.email, self.hidden)
+        return _event_visible_to(event, self.email, self.hidden, self.addresses)
 
 
 # ---------------------------------------------------------------------------

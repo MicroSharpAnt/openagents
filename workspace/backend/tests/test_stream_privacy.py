@@ -127,6 +127,7 @@ def _live(client, workspace, monkeypatch, published, headers):
     monkeypatch.setattr(events_mod, "LIVE_STREAM_JITTER_SECONDS", 0.0)
     monkeypatch.setattr(events_mod, "LIVE_STREAM_KEEPALIVE_SECONDS", 0.05)
     monkeypatch.setattr(agent_stream.hub, "_task", None)
+    monkeypatch.setattr(agent_stream, "_live_override", True)
     agent_stream.configure_allowlist(workspace["id"])
     real = agent_stream.hub.subscribe_live
 

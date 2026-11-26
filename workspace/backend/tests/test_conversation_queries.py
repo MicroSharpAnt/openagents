@@ -34,7 +34,7 @@ def query_db(request, db):
 
 def message(id, timestamp=100, source=ME, target=BOT, **kw):
     return dict(id=id, network_id=WID, type='workspace.message.posted', source=source,
-                target=target, timestamp=timestamp, visibility='direct', payload={'content': id}) | kw
+                target=target, timestamp=timestamp, visibility='direct', payload={'content': id}, metadata={}) | kw
 
 
 def summaries(query_db, rows, markers=None, mine=(ME,), agent=None, limit=20):

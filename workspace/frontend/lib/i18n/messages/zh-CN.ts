@@ -5,6 +5,7 @@ import type { Messages } from './en-US';
  * one that no longer exists in English — fails the build.
  */
 export const messages: Messages = {
+  agentConversation: {"ownerHint": "你将以智能体创建者的身份参与这位访客的对话。", "notice": "智能体创建者可查看并参与本对话。", "paused": "创建者已接管，智能体自动回复已暂停。", "automatic": "智能体自动回复已开启。", "takeOver": "接管对话", "resume": "恢复智能体", "ownerBadge": "智能体创建者"},
   routineHub: {
     heading: "工作区定时任务",
     description: "每个定时任务，都与发起它的对话相连。",

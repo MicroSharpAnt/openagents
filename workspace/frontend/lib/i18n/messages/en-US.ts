@@ -11,6 +11,7 @@
  */
 
 export const messages = {
+  agentConversation: {"ownerHint": "You are replying as the agent owner in this visitor’s conversation.", "notice": "The agent owner can view and participate in this conversation.", "paused": "The owner is handling this conversation. Automatic replies are paused.", "automatic": "Automatic agent replies are on.", "takeOver": "Take over", "resume": "Resume agent", "ownerBadge": "Agent owner"},
   routineHub: {
     heading: "Workspace routines",
     description: "Every routine, connected to the conversation behind it.",

@@ -88,6 +88,7 @@ export function HumanMessageRow({ message, agents, agentNames, agentLabels, huma
               </Button>
             </WithTooltip>
           ) : <span className="text-sm font-semibold text-foreground">{displayName}</span>}
+          {typeof message.metadata?.dm_owner === 'string' && <Badge variant="secondary" data-agent-owner-badge="">{t('agentConversation.ownerBadge')}</Badge>}
           {guest && <Badge variant="secondary" data-guest-badge="">{t('chat.guestBadge')}</Badge>}
           {timestamp && <span className="font-normal">{timestamp}</span>}
           {/* v1.1 M5 — information vs execution in directed threads */}

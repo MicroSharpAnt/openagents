@@ -202,7 +202,7 @@ def _notify_dm(db: Session, workspace: Workspace, event: dict) -> int:
     name = _sender_name(db, wid, event, sender_email)
     title = f"{name} sent you a message"
     message = _snippet(_readable_mentions(db, wid, payload.get("content")))
-    session = dm_session_id(source, target)
+    session = dm_session_id((event.get('metadata') or {}).get('dm_agent') or source, target)
 
     # Burst collapse: refresh the still-unread notification from this sender.
     latest = db.execute(
@@ -210,6 +210,7 @@ def _notify_dm(db: Session, workspace: Workspace, event: dict) -> int:
         .where(
             NotificationRecord.workspace_id == wid,
             NotificationRecord.kind == "dm",
+            NotificationRecord.channel_name == session,
             NotificationRecord.recipient_email == recipient,
             NotificationRecord.created_by == source,
             NotificationRecord.is_read.is_(False),

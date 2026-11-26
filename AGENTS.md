@@ -49,3 +49,14 @@ Self-hosters build the frontend from source with `workspace/docker-compose.prod.
 
 - Commits must not contain `Co-Authored-By:` lines; CI rejects them.
 - Push over HTTPS with `gh`; the shared SSH key can't push to this repo.
+
+## Agent skills
+
+### Issue tracker
+GitHub Issues in `MicroSharpAnt/openagents`; pass `-R MicroSharpAnt/openagents` explicitly. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+Use the five default triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+Single-context glossary and ADRs at the repository root. See `docs/agents/domain.md`.

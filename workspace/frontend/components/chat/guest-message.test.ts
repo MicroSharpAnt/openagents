@@ -119,6 +119,16 @@ describe('a guest message in the owner’s thread', () => {
     expect(host.querySelector('[data-share-request]')?.textContent).toBe('guestThread.requestApproved');
   });
 
+  it('identifies an owner reply as a named human with an Agent owner badge', async () => {
+    const message = eventToMessage(guestEvent({ source: 'human:owner@example.com', target: 'human:visitor@example.com',
+      visibility: 'direct', payload: { content: 'I can help', sender_name: 'Owner' },
+      metadata: { dm_agent: 'openagents:bot', dm_owner: 'owner@example.com' } }));
+    await act(async () => root.render(React.createElement(ChatMessage, { message })));
+    expect(host.textContent).toContain('Owner');
+    expect(host.querySelector('[data-agent-owner-badge]')?.textContent).toBe('agentConversation.ownerBadge');
+    expect(host.querySelector('[data-guest-badge]')).toBeNull();
+  });
+
   it('cites a guest by name when replying', () => {
     expect(citationFor(eventToMessage(guestEvent())).sender_name).toBe('Maya');
   });

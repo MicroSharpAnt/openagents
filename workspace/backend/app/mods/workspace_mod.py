@@ -2203,6 +2203,8 @@ async def _handle_message_posted(event: Event, ctx: PipelineContext) -> Optional
 
     db = ctx.extra["db"]
     workspace = ctx.extra["workspace"]
+    from app.services.agent_conversations import prepare_message
+    prepare_message(event, ctx)
     payload = event.payload or {}
     if event.source.startswith("openagents:") and (event.target or "").startswith("channel/") and (payload.get("message_type") or "chat") == "chat":
         from app.services.thread_activity import reply_requester

@@ -59,9 +59,7 @@ export function messagesForSession(sessionId: string, msgs: WorkspaceMessage[]):
   const dmPair = parseDMSession(sessionId);
   return msgs.flatMap((msg) => {
     const belongsToSession = dmPair
-      ? msg.sessionId === sessionId ||
-        dmPair.includes(msg.sessionId) ||
-        dmPair.map(normalizeAgentAddress).includes(normalizeAgentAddress(msg.sessionId))
+      ? msg.sessionId === sessionId
       : msg.sessionId === sessionId;
     if (!belongsToSession) return [];
     return dmPair ? [{ ...msg, sessionId }] : [msg];

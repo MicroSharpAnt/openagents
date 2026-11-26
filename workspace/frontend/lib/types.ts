@@ -1,3 +1,4 @@
+import { dmSessionId } from './dm';
 import { guestDisplayName, isGuestMessage } from './guest-sender';
 
 export interface Workspace {
@@ -1125,7 +1126,17 @@ export interface MessagePollResponse {
   hasMore: boolean;
 }
 
+export interface DirectConversationState {
+  session_id: string;
+  owner_email: string | null;
+  can_manage: boolean;
+  paused: boolean;
+}
+
 export interface DMConversation {
+  ownerEmail?: string | null;
+  canManage?: boolean;
+  paused?: boolean;
   pinned?: boolean;
   starred?: boolean;
   agents: [string, string];
@@ -1152,7 +1163,9 @@ export function eventToMessage(event: ONMEvent): WorkspaceMessage {
     messageId: event.id,
     senderId: (payload.sender_id as string) || null,
     senderAddress: event.source || null,
-    sessionId: event.target.replace(/^channel\//, ''),
+    sessionId: !event.target.startsWith('channel/') && (event.visibility === 'direct' || /^(human:|openagents:)/.test(event.target))
+      ? dmSessionId((event.metadata?.dm_agent as string) || event.source, event.target)
+      : event.target.replace(/^channel\//, ''),
     senderType: isHuman ? 'human' : 'agent',
     senderName,
     content: (payload.content as string) || '',

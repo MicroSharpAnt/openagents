@@ -1,5 +1,6 @@
 'use client';
 
+import { DirectConversationControls, useDirectConversation } from './direct-conversation-controls';
 import { ThreadLiveBrowser } from './thread-live-browser';
 import { AgentMessageAccessProvider } from './agent-message-access';
 import { ThreadResources } from './thread-resources';
@@ -99,7 +100,8 @@ export function ChatView() {
     onSwitch: setOptimisticSessionId,
   });
 
-  const dm = useThreadDm(currentSessionId, currentUser, agents);
+  const conversation = useDirectConversation(currentSessionId);
+  const dm = useThreadDm(currentSessionId, currentUser, agents, conversation.state);
   const { isDM, counterpart: dmCounterpart, writable: dmWritable, withPerson: dmWithPerson } = dm;
   const currentSession = sessions.find((s) => s.sessionId === currentSessionId);
   const personalAssistantConversation = agents.some(agent => agent.builtin && (
@@ -115,7 +117,9 @@ export function ChatView() {
   const me = useMe(workspace?.workspaceId);
   const { brief } = useBrief(!isDM ? currentSessionId : null, sessionMessages.length);
   const myEmail = (me?.email || (currentUser.id.includes('@') ? currentUser.id : '')).trim().toLowerCase();
-  const composerHint = dmWithPerson
+  const composerHint = dm.ownerConversation
+    ? t('agentConversation.ownerHint')
+    : dmWithPerson
     ? dm.self ? t('peopleMessaging.selfDmHint') : t('peopleMessaging.dmPersonHint', { name: dm.title ?? '' })
     : brief?.directorEmail && myEmail && brief.directorEmail !== myEmail
       ? t('brief.composerHint')
@@ -170,6 +174,7 @@ export function ChatView() {
         routine={currentRoutine}
         onEditRoutine={setEditingRoutine}
       />
+      {isDM && <DirectConversationControls conversation={conversation} />}
       <ThreadResources key={currentSessionId} messages={browserMessages} queueMessages={displayMessages} pendingQueue={sessionPendingQueue} />
 
       {workspace && workspaceToken && !workspace.creatorEmail

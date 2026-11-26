@@ -2,12 +2,14 @@
 from sqlalchemy import and_, case, func, literal_column, or_, select
 
 from app.models import EventRecord
+from app.services.agent_conversations import conversation_source, pair_filter
 
 
 def _columns(events):
     e = events.c
-    return (case((e.source <= e.target, e.source), else_=e.target),
-            case((e.source > e.target, e.source), else_=e.target))
+    source = conversation_source(events)
+    return (case((source <= e.target, source), else_=e.target),
+            case((source > e.target, source), else_=e.target))
 
 
 def _scope(events, workspace_id):
@@ -32,13 +34,13 @@ def conversation_pairs_query(workspace_id, limit, agent=None, visibility_filters
                    func.max(e.timestamp).label('last_ts'), func.count().label('msg_count')).where(
         *_scope(events, workspace_id), *visibility_filters)
     if agent:
-        query = query.where(or_(e.source == agent, e.target == agent))
+        query = query.where(or_(conversation_source(events) == agent, e.target == agent))
     # Count the complete history, including legacy pairs without a thread-link
     # row. The partial covering index avoids reading channel messages/payloads.
     return query.group_by(a, b).order_by(func.max(e.timestamp).desc(), a, b).limit(limit)
 
 
-def conversation_detail_queries(workspace_id, pairs, read_markers, own_addresses, cutoff, *, events=None):
+def conversation_detail_queries(workspace_id, pairs, read_markers, own_addresses, cutoff, *, events=None, sender_addresses=None):
     """At most two queries, independent of the number of returned pairs."""
     if not pairs:
         return None, None
@@ -47,8 +49,7 @@ def conversation_detail_queries(workspace_id, pairs, read_markers, own_addresses
     a, b = _columns(events)
     latest_filters, unread_filters = [], []
     for row in pairs:
-        pair = or_(and_(e.source == row.agent_a, e.target == row.agent_b),
-                   and_(e.source == row.agent_b, e.target == row.agent_a))
+        pair = pair_filter(events, row.agent_a, row.agent_b)
         latest_filters.append(and_(pair, e.timestamp == row.last_ts))
         marker = read_markers.get(f'dm:{row.agent_a},{row.agent_b}')
         if marker is not None:
@@ -65,7 +66,8 @@ def conversation_detail_queries(workspace_id, pairs, read_markers, own_addresses
     if unread_filters:
         unread = select(a.label('agent_a'), b.label('agent_b'), func.count().label('unread_count')).where(
             *_scope(events, workspace_id), or_(*unread_filters), e.timestamp >= cutoff,
-            e.target.in_(own_addresses), ~e.source.in_(own_addresses),
+            or_(e.target.in_(own_addresses), conversation_source(events).in_(own_addresses)),
+            ~e.source.in_(sender_addresses if sender_addresses is not None else own_addresses),
             or_(e.payload['message_type'].as_string().is_(None),
                 e.payload['message_type'].as_string().notin_(['thinking', 'status', 'todos'])),
         ).group_by(a, b)

@@ -15,6 +15,8 @@ const h = vi.hoisted(() => ({
   openView: vi.fn(),
   reply: null as null | ((message: WorkspaceMessage) => void),
   sent: [] as unknown[][],
+  direct: [] as unknown[][],
+  conversation: null as Record<string, unknown> | null,
   send: null as null | ((text: string) => Promise<void>),
   mounted: null as null | { sessionId: string | null; setMessages: (msgs: unknown[]) => void },
 }));
@@ -33,6 +35,12 @@ vi.mock('@/components/layout/layout-context', () => ({
 vi.mock('@/lib/api', () => ({
   workspaceApi: {
     isConfigured: () => false,
+    directConversationState: async () => h.conversation,
+    sendDirectMessage: async (...args: unknown[]) => {
+      h.direct.push(args);
+      return { id: 'owner-reply', type: 'workspace.message.posted', source: 'human:owner@test.dev', target: args[0], visibility: 'direct', timestamp: Date.now(),
+        payload: { content: args[1], sender_name: 'Owner' }, metadata: { dm_agent: 'openagents:bot', dm_owner: 'owner@test.dev', dm_conversation: args[6], target_agents: ['__no_response__'] } };
+    },
     listNodes: async () => [],
     sendMessage: async (sessionId: string, content: string, ...args: unknown[]) => { h.sent.push([sessionId, content, ...args]); return ({ id: 'a3', source: 'human:user-1', target: `channel/${sessionId}`, type: 'workspace.message.posted', timestamp: Date.now(), visibility: 'channel', payload: { content }, metadata: { target_agents: ['bot'] } }); },
     loadMessageHistory: async () => ({ events: [], has_more: false }),
@@ -122,7 +130,7 @@ beforeEach(() => {
   root = createRoot(container);
   resetOptimisticStoreForTests();
   h.scrollKeys = []; h.generation = 0; h.openView.mockClear();
-  h.seen = []; h.sent = []; h.reply = null;
+  h.seen = []; h.sent = []; h.reply = null; h.direct = []; h.conversation = null; h.send = null;
   h.threads = {
     'thread-a': [msg('a1', 'thread-a'), step('a2', 'thread-a')],
     'thread-b': [msg('b1', 'thread-b'), step('b2', 'thread-b')],
@@ -314,4 +322,28 @@ it('keeps Yumi setup available after the welcome message and retires it once an 
   ];
   await open('welcome');
   expect(container.querySelector('[data-yumi-guide="false"]')).not.toBeNull();
+});
+
+
+it('opens the composer for the authorized owner and sends without switching away from the visitor conversation', async () => {
+  const session = 'dm:human:visitor@test.dev,openagents:bot';
+  const switchSession = vi.fn();
+  h.ws.currentUser = { id: 'owner@test.dev', name: 'Owner', isAuthenticated: true };
+  h.ws.setCurrentSessionId = switchSession;
+  h.conversation = { session_id: session, owner_email: 'owner@test.dev', can_manage: true, paused: true };
+  h.threads[session] = [msg('visitor-question', session)];
+  await open(session);
+  expect(h.send).not.toBeNull();
+  await act(async () => { await h.send!('I can help'); });
+  expect(h.direct[0]).toEqual(['human:visitor@test.dev', 'I can help', 'Owner', 'owner@test.dev', 'human:owner@test.dev', undefined, session]);
+  expect(switchSession).not.toHaveBeenCalled();
+  expect(shown()).not.toContain('loading');
+});
+
+it('does not let a different visitor compose in an owner-only conversation', async () => {
+  const session = 'dm:human:visitor@test.dev,openagents:bot';
+  h.ws.currentUser = { id: 'outsider@test.dev', name: 'Other', isAuthenticated: true };
+  h.threads[session] = [];
+  await open(session);
+  expect(h.send).toBeNull();
 });
