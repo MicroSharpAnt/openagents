@@ -730,6 +730,8 @@ app.include_router(agent_services.router)
 app.include_router(account.router)
 app.include_router(app_version.router)
 app.include_router(approvals.router)
+from app.routers import operation_approvals
+app.include_router(operation_approvals.router)
 app.include_router(sharing.router)
 app.include_router(groups.router)
 app.include_router(grants.router)
