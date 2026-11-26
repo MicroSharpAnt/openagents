@@ -92,7 +92,7 @@ export function coreTiers(): CoreTier[] {
     tierAt(LOCAL_CORE, "local"),
     tierAt(GLOBAL_CORE, "global"),
     tierAt(bundledCoreDir(), "bundled"),
-  ])
+  ], process.env.OPENAGENTS_CORE_SOURCE === "bundled")
 }
 
 /**
@@ -100,8 +100,11 @@ export function coreTiers(): CoreTier[] {
  * install trees on disk. Pass the tiers in discovery order (local, global,
  * bundled): a tie keeps that order, since sort is stable.
  */
-export function orderCoreTiers(tiers: Array<CoreTier | null>): CoreTier[] {
+export function orderCoreTiers(tiers: Array<CoreTier | null>, bundledOnly = false): CoreTier[] {
   const present = tiers.filter((t): t is CoreTier => t !== null)
+  // Self-hosted builds can pin their reviewed connector; never silently fall
+  // back to an unrelated downloaded version when the bundle is unavailable.
+  if (bundledOnly) return present.filter((t) => t.source === "bundled")
   return [
     ...present.filter((t) => t.source === "local"),
     ...present

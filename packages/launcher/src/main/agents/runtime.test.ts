@@ -8,6 +8,16 @@ const tier = (
 ): CoreTier => ({ dir: `/${source}`, version, source })
 
 describe("orderCoreTiers", () => {
+  it("pins a self-hosted build to its bundled core even when global is newer", () => {
+    expect(orderCoreTiers([
+      tier("local", "9.0.0"), tier("global", "9.0.0"), tier("bundled", "0.2.242"),
+    ], true)).toEqual([tier("bundled", "0.2.242")])
+  })
+
+  it("does not fall back to an unapproved core when the pinned bundle is missing", () => {
+    expect(orderCoreTiers([tier("global", "9.0.0")], true)).toEqual([])
+  })
+
   it("runs the app's own core when npm's latest trails it", () => {
     // The exact state that hid Kimi Code CLI: an app built against 0.2.175
     // downloading — and then running — the 0.2.173 that npm still called

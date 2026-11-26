@@ -148,6 +148,13 @@ from the configured `CODEX_HOME` (or the default Codex home); workspace tokens a
 claim tokens are never placed in model prompts. The workspace API endpoint remains
 configurable through the connector's existing endpoint setting.
 
+If the ordinary Codex entry point is an npm script, set the agent environment
+`CODEX_APPROVAL_BINARY` to an absolute native Codex executable verified for this
+mode. Only controlled visitor turns use this override; owner turns keep their
+ordinary runtime. Keep the matching `codex-code-mode-host` helper beside the
+executable when that Codex release ships one. The same native-binary and isolation
+checks still apply. The installed gpt-6-astra path was verified with Codex 0.172.0.
+
 Use a dedicated absolute working directory, not the user's home or an ancestor of
 credentials/journals. Symlinks, existing destinations, moves of runtime metadata
 (`.git`, `.codex`, `.openagents`), and source trees containing Codex/launcher

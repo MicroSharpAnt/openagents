@@ -8,9 +8,10 @@ const path = require('node:path');
 const { PassThrough, Writable } = require('node:stream');
 const { EventEmitter } = require('node:events');
 const childProcess = require('node:child_process');
-const prompts = [], threadStarts = [];
+const prompts = [], threadStarts = [], spawnedBins = [];
 // Emulate only the external app-server protocol, keeping adapter/client/runtime real.
-mock.method(childProcess, 'spawn', () => {
+mock.method(childProcess, 'spawn', (bin) => {
+  spawnedBins.push(bin);
   const proc = new EventEmitter(); proc.stdout = new PassThrough(); proc.stderr = new PassThrough(); proc.kill = () => {};
   const emit = event => proc.stdout.write(JSON.stringify(event) + '\n');
   const thread = 'fresh-' + (threadStarts.length + 1);
@@ -62,7 +63,7 @@ test('fresh controlled visitor turns preserve bounded current-DM history without
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const adapter = new CodexAdapter({ endpoint: `http://127.0.0.1:${server.address().port}`, workspaceId: 'history-test', token: 'HOST_CREDENTIAL_SENTINEL', agentName: 'bot' });
-  adapter._codexBin = process.execPath; adapter._useCliMode = true; adapter._customProvider = null; adapter.agentEnv = {}; adapter.workingDir = dir;
+  adapter._codexBin = path.join(dir, 'npm-shim'); adapter._useCliMode = true; adapter._customProvider = null; adapter.agentEnv = { CODEX_APPROVAL_BINARY: process.execPath }; adapter.workingDir = dir;
   adapter._channelThreads['dm:human:visitor@test'] = 'unrestricted-owner-thread';
   t.after(async () => { clearTimeout(adapter._presenceHeartbeatTimer); await new Promise(resolve => server.close(resolve)); fs.rmSync(dir, { recursive: true, force: true }); });
   for (let i = 0; i < 2; i++) {
@@ -72,6 +73,7 @@ test('fresh controlled visitor turns preserve bounded current-DM history without
     assert.equal(adapter._channelBusy.has(msg.sessionId), false);
   }
   assert.equal(prompts.length, 2);
+  assert.ok(spawnedBins.every(bin => bin === fs.realpathSync(process.execPath)));
   for (const prompt of prompts) {
     assert.match(prompt, /Earlier answer: rename snake-game/);
     assert.match(prompt, /Owner clarified: use archive folder/);

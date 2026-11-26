@@ -367,6 +367,13 @@ function bundledCoreVersion(): string | null {
 }
 
 async function ensureCoreLibrary(): Promise<void> {
+  if (process.env.OPENAGENTS_CORE_SOURCE === "bundled") {
+    coreVersion = readCoreVersion()
+    if (!coreVersion) throw new Error("Pinned bundled connector is missing")
+    slog("Core library: pinned to bundled v" + coreVersion)
+    if (_updateSplash) _updateSplash("Core library ready", 80, "v" + coreVersion)
+    return
+  }
   const corePkgPath = path.join(GLOBAL_MODULES, CORE_PKG, "package.json")
   let installedVersion: string | null = null
 

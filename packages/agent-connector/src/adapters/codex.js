@@ -520,7 +520,7 @@ class CodexAdapter extends BaseAdapter {
     if (this._stoppedBeforeStart(channel)) return;
     const content = msg.originalContent === undefined ? msg.content : msg.originalContent;
     const result = await runControlledCodex({
-      bin: this._codexBin, root: this.workingDir, env: this.agentEnv || process.env,
+      bin: this.agentEnv?.CODEX_APPROVAL_BINARY || this._codexBin, root: this.workingDir, env: this.agentEnv || process.env,
       model: this._effectiveModel(), customProvider: this._customProvider,
       prompt: `${context}\n\n${history}User message:\n${content || ''}${(msg.attachments || []).length ? '\nAttachments are not downloaded in controlled visitor mode. Work only with existing files inside the configured root.' : ''}`, executor, sessionId: operationSession,
       onProcess: proc => { if (proc) this._channelProcesses[channel] = proc; else delete this._channelProcesses[channel]; },
