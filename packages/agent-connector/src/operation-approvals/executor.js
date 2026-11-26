@@ -51,19 +51,31 @@ class OperationExecutor {
     let record = await this.api.create({ session_id: sessionId, request_key: requestKey, operation });
     if (!record?.id || !record.operation_digest) throw new Error('Invalid approval response');
     durableWrite(journal, { phase: 'waiting', id: record.id, operation });
-    const deadline = Date.now() + 31 * 60 * 1000;
-    while (record.status === 'pending' || (record.status === 'approved' && record.paused)) {
+    const deadline = Math.min(Date.now() + 31 * 60 * 1000, Date.parse(record.expires_at) || Infinity);
+    let claim;
+    while (!claim) {
+      while (record.status === 'pending' || (record.status === 'approved' && record.paused)) {
+        checkAbort();
+        if (Date.now() >= deadline) throw new Error('Approval wait expired');
+        await new Promise(resolve => setTimeout(resolve, this.pollMs));
+        record = await this.api.get(record.id);
+      }
       checkAbort();
-      if (Date.now() > deadline) throw new Error('Approval wait expired');
-      await new Promise(resolve => setTimeout(resolve, this.pollMs));
-      record = await this.api.get(record.id);
+      if (record.status !== 'approved') return { status: record.status, result: { reason: 'Operation not approved; no filesystem changes' } };
+      if (Date.now() >= deadline) throw new Error('Approval wait expired');
+      // Save intent BEFORE claim. Only an explicit non-grant can permit another attempt.
+      durableWrite(journal, { phase: 'claiming', id: record.id, operation });
+      try {
+        claim = await this.api.claim(record.id, record.operation_digest);
+        if (!claim?.execution_token) throw new Error('Execution claim not granted');
+      } catch (error) {
+        if (error.statusCode !== 409) throw error;
+        record = await this.api.get(record.id);
+        // Never retry executing/consumed or ambiguous claims. A paused approval
+        // proves this attempt was denied by takeover, and may wait for resume.
+        if (record.status !== 'approved' || !record.paused) throw error;
+      }
     }
-    checkAbort();
-    if (record.status !== 'approved') return { status: record.status, result: { reason: 'Operation not approved; no filesystem changes' } };
-    // Save intent BEFORE claim. A lost response or crash is never retried.
-    durableWrite(journal, { phase: 'claiming', id: record.id, operation });
-    const claim = await this.api.claim(record.id, record.operation_digest);
-    if (!claim?.execution_token) throw new Error('Execution claim not granted');
     durableWrite(journal, { phase: 'claimed', id: record.id, operation });
     let outcome;
     try {
@@ -73,7 +85,9 @@ class OperationExecutor {
       outcome = { status: 'failed', result: { reason: error.message } };
     }
     durableWrite(journal, { phase: 'completed', id: record.id, operation, outcome });
-    try { await this.api.result(record.id, { ...outcome, execution_token: claim.execution_token }); }
+    const summary = typeof outcome.result === 'string' ? outcome.result
+      : (outcome.result?.reason || `Moved ${source} to ${destination}`);
+    try { await this.api.result(record.id, { ...outcome, result: summary.slice(0, 4096), execution_token: claim.execution_token }); }
     catch { return { ...outcome, completion_unconfirmed: true }; }
     return outcome;
   }

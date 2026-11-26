@@ -21,10 +21,13 @@ from app.services.agent_conversations import visitor_pair, agent_owner, lock_con
 from app.services.visibility import resolve_viewer
 
 class OperationRoute(APIRoute):
+    """Wrap approval failures without leaking submitted paths or execution tokens."""
     def get_route_handler(self):
+        """Return a handler that preserves the standard API response envelope."""
         handler = super().get_route_handler()
 
         async def wrapped(request):
+            """Translate validation and authorization errors into safe HTTP responses."""
             try:
                 return await handler(request)
             except HTTPException as exc:
@@ -39,6 +42,7 @@ router = APIRouter(prefix='/v1/operation-approvals', tags=['Operation approvals'
 
 
 class Operation(BaseModel):
+    """Freeze the move scope and the connector-provided filesystem fingerprint."""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['move']
     root: str = Field(min_length=1, max_length=4096)
@@ -49,6 +53,7 @@ class Operation(BaseModel):
     @field_validator('root', 'source', 'destination')
     @classmethod
     def valid_path(cls, value, info):
+        """Require canonical absolute roots and canonical relative operation paths."""
         path = PurePosixPath(value)
         if '\x00' in value or '\\' in value or '..' in path.parts or str(path) != value:
             raise PydanticCustomError('path_scope', 'Paths must be canonical and cannot traverse parents')
@@ -58,6 +63,7 @@ class Operation(BaseModel):
 
 
 class Create(BaseModel):
+    """Identify one immutable connector request within a visitor conversation."""
     network: str
     session_id: str
     request_key: str = Field(min_length=1, max_length=200)
@@ -65,6 +71,7 @@ class Create(BaseModel):
 
 
 def actor(network, db, token, authorization, agent):
+    """Resolve a signed-in member or named connector within the requested workspace."""
     ws = _resolve_workspace(db, network)
     if not ws:
         raise HTTPException(404, 'Network not found')
@@ -75,6 +82,7 @@ def actor(network, db, token, authorization, agent):
 
 
 def context_data(db, ws, viewer, session_id):
+    """Validate the canonical visitor-agent pair against active membership and ownership."""
     pair = visitor_pair(session_id)
     if viewer.kind != 'agent' or not pair or pair.session_id != session_id or pair.agent_address != 'openagents:' + viewer.agent_name:
         raise HTTPException(403, 'Connector conversation mismatch')
@@ -92,6 +100,7 @@ def context_data(db, ws, viewer, session_id):
 @router.get('/context')
 def context(network: str, session_id: str, db: Session = Depends(get_db), x_workspace_token: str | None = Header(None),
             authorization: str | None = Header(None), x_agent_name: str | None = Header(None)):
+    """Return authoritative execution requirements for a named connector DM."""
     ws, viewer = actor(network, db, x_workspace_token, authorization, x_agent_name)
     return success_response(context_data(db, ws, viewer, session_id))
 
@@ -99,6 +108,10 @@ def context(network: str, session_id: str, db: Session = Depends(get_db), x_work
 @router.post('')
 def create(body: Create, db: Session = Depends(get_db), x_workspace_token: str | None = Header(None),
            authorization: str | None = Header(None), x_agent_name: str | None = Header(None)):
+    """Create an immutable request under the conversation lock; commit before returning.
+
+    A unique request key handles concurrent duplicate creation without widening scope.
+    """
     ws, viewer = actor(body.network, db, x_workspace_token, authorization, x_agent_name)
     ctx = context_data(db, ws, viewer, body.session_id)
     operation = body.operation.model_dump()
@@ -126,6 +139,10 @@ def create(body: Create, db: Session = Depends(get_db), x_workspace_token: str |
 
 
 def load(db, ws, viewer, approval_id):
+    """Load a visible request and lock its conversation and row in the caller transaction.
+
+    Refresh expiry and ownership before callers decide or claim.
+    """
     row = db.get(OperationApproval, approval_id)
     if row is None or row.workspace_id != str(ws.id) or not svc.visible(db, row, viewer):
         raise HTTPException(404, 'Operation approval not found')
@@ -141,6 +158,7 @@ def load(db, ws, viewer, approval_id):
 def listing(network: str, session_id: str | None = None, db: Session = Depends(get_db),
             x_workspace_token: str | None = Header(None), authorization: str | None = Header(None),
             x_agent_name: str | None = Header(None)):
+    """List only visible requests, committing each refreshed expiry transition."""
     ws, viewer = actor(network, db, x_workspace_token, authorization, x_agent_name)
     query = select(OperationApproval).where(OperationApproval.workspace_id == str(ws.id))
     if session_id:
@@ -159,6 +177,7 @@ def listing(network: str, session_id: str | None = None, db: Session = Depends(g
 def get(approval_id: str, network: str, db: Session = Depends(get_db),
         x_workspace_token: str | None = Header(None), authorization: str | None = Header(None),
         x_agent_name: str | None = Header(None)):
+    """Return visible state after committing ownership and expiration invalidation."""
     ws, viewer = actor(network, db, x_workspace_token, authorization, x_agent_name)
     row = load(db, ws, viewer, approval_id)
     result = svc.serialize(db, row, viewer)
@@ -167,6 +186,7 @@ def get(approval_id: str, network: str, db: Session = Depends(get_db),
 
 
 class Decision(BaseModel):
+    """Represent one authenticated human approval, rejection, or withdrawal."""
     network: str
     decision: Literal['approve', 'reject', 'withdraw']
 
@@ -175,6 +195,7 @@ class Decision(BaseModel):
 def decision(approval_id: str, body: Decision, db: Session = Depends(get_db),
              x_workspace_token: str | None = Header(None), authorization: str | None = Header(None),
              x_agent_name: str | None = Header(None)):
+    """Apply a human decision with row and conversation locks plus a conditional update."""
     ws, viewer = actor(body.network, db, x_workspace_token, authorization, x_agent_name)
     row = load(db, ws, viewer, approval_id)
     allowed = row.visitor_email if body.decision == 'withdraw' else svc.current_owner(db, row)
@@ -196,21 +217,27 @@ def decision(approval_id: str, body: Decision, db: Session = Depends(get_db),
 
 
 class Claim(BaseModel):
+    """Bind a one-shot claim to the immutable operation digest."""
     network: str
     operation_digest: str
 
 
 class Result(BaseModel):
+    """Record a bounded human-readable completion for the original execution token."""
     network: str
     execution_token: str
     status: Literal['succeeded', 'failed', 'invalidated']
-    result: dict | str | None = None
+    result: str | None = Field(default=None, max_length=4096)
 
 
 @router.post('/{approval_id}/claim')
 def claim(approval_id: str, body: Claim, db: Session = Depends(get_db),
           x_workspace_token: str | None = Header(None), authorization: str | None = Header(None),
           x_agent_name: str | None = Header(None)):
+    """Atomically consume an approved grant while the conversation lock excludes takeover.
+
+    Store only a token hash and return the secret once after commit.
+    """
     import hashlib
     import secrets
     from sqlalchemy import update
@@ -238,6 +265,10 @@ def claim(approval_id: str, body: Claim, db: Session = Depends(get_db),
 def result(approval_id: str, body: Result, db: Session = Depends(get_db),
            x_workspace_token: str | None = Header(None), authorization: str | None = Header(None),
            x_agent_name: str | None = Header(None)):
+    """Commit an idempotent completion authenticated by the consumed claim token.
+
+    Neither duplicate completion nor a lost response can issue another execution grant.
+    """
     import hashlib
     import secrets
     ws, viewer = actor(body.network, db, x_workspace_token, authorization, x_agent_name)

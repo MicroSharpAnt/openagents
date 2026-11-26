@@ -23,7 +23,7 @@ test('an unavailable canonical DM context prevents the unrestricted execution ro
     _useCliMode: true, _log() {}, _autoTitleChannel: async () => {}, sendStatus: async () => {},
     _handleViaSubprocess: async () => { ran = true; }, sendError: async (_channel, text) => errors.push(text),
   });
-  await adapter._handleMessage({ content: 'move source to target', senderType: 'human', sessionId: 'dm:visitor:agent' });
+  await adapter._handleMessage({ content: 'move source to target', senderType: 'human', sessionId: 'dm:human:visitor@example.test,openagents:agent' });
   assert.equal(ran, false);
   assert.match(errors.join(' '), /context|approval/i);
 });
@@ -34,7 +34,7 @@ for (const required of [false, true]) {
     const server = http.createServer((req, res) => {
       assert.equal(req.headers['x-workspace-token'], 'test-credential');
       assert.equal(req.headers['x-agent-name'], 'agent');
-      assert.match(req.url, /context\?session_id=dm%3Avisitor%3Aagent&network=network/);
+      assert.match(req.url, /context\?session_id=dm%3Ahuman%3Avisitor%40example.test%2Copenagents%3Aagent&network=network/);
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ code: 0, data: { required, paused: false, owner_email: 'owner@example.test', visitor_email: required ? 'visitor@example.test' : 'owner@example.test' } }));
     });
@@ -45,7 +45,7 @@ for (const required of [false, true]) {
       _useCliMode: true, _codexBin: null, _log() {}, _autoTitleChannel: async () => {}, sendStatus: async () => {},
       _handleViaSubprocess: async () => { ran = true; }, sendError: async (_channel, text) => errors.push(text),
     });
-    await adapter._handleMessage({ content: 'move source to target', senderType: 'human', sessionId: 'dm:visitor:agent' });
+    await adapter._handleMessage({ content: 'move source to target', senderType: 'human', sessionId: 'dm:human:visitor@example.test,openagents:agent' });
     assert.equal(ran, !required);
     assert.equal(errors.length, required ? 1 : 0);
   });

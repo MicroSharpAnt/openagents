@@ -30,6 +30,7 @@ function isGuestMessage(msg) {
 }
 
 const crypto = require('crypto');
+const { ApprovalClient } = require('../operation-approvals/client');
 const { WorkspaceClient, SessionRevokedError } = require('../workspace-client');
 const { generateSessionTitle, SESSION_DEFAULT_RE, redactSecrets, secretValues } = require('./utils');
 const { defaultAgentWorkdir } = require('../paths');
@@ -1672,6 +1673,26 @@ class BaseAdapter {
     return true;
   }
 
+  /** Gate canonical human/agent DMs before any adapter-specific execution. */
+  async _operationContextAllowsRun(channel) {
+    if (!BaseAdapter.isHumanAgentDm(channel)) return true;
+    const api = new ApprovalClient({ endpoint: this.endpoint, network: this.workspaceId, token: this.token, agentName: this.agentName });
+    const ctx = await api.context(channel);
+    if (typeof ctx.required !== 'boolean' || typeof ctx.paused !== 'boolean' || !ctx.owner_email || !ctx.visitor_email) throw new Error('Invalid operation approval context');
+    if (ctx.paused) return false;
+    if (ctx.required && typeof this._handleControlledVisitor !== 'function') {
+      throw new Error('Visitor operation approval runtime unavailable: this adapter is unsupported');
+    }
+    return true;
+  }
+
+  static isHumanAgentDm(channel) {
+    if (typeof channel !== 'string' || !channel.startsWith('dm:')) return false;
+    const parts = channel.slice(3).split(',');
+    return parts.length === 2 && parts.some(p => p.startsWith('human:') && p.includes('@'))
+      && parts.some(p => p.startsWith('openagents:') && p.length > 11);
+  }
+
   async _channelWorker(channel, msg) {
     this._channelBusy.add(channel);
     this._schedulePresenceHeartbeat();
@@ -1707,9 +1728,10 @@ class BaseAdapter {
         if (this._sharedContextCandidate(current)) await this._applySharedContext(channel, current);
         // Checked after the round trips above, which a stop can land inside:
         // a message from before the stop never reaches the CLI.
+        const operationAllowed = BaseAdapter.isHumanAgentDm(channel) ? await this._operationContextAllowsRun(channel) : true;
         if (generation !== this._stopGenerationFor(channel)) {
           dropped++;
-        } else {
+        } else if (operationAllowed) {
           this._channelRunGeneration[channel] = generation;
           // A turn the user asked for after the stop speaks normally again.
           this._mutedChannels.delete(channel);

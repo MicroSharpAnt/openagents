@@ -21,7 +21,7 @@ class ApprovalClient {
         res.on('error', reject);
         res.on('aborted', () => reject(new Error('Approval response incomplete')));
         res.on('end', () => {
-          if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`Approval service HTTP ${res.statusCode}`));
+          if (res.statusCode < 200 || res.statusCode >= 300) return reject(Object.assign(new Error(`Approval service HTTP ${res.statusCode}`), { statusCode: res.statusCode }));
           try {
             const result = JSON.parse(text);
             if (!result.data || (result.code !== undefined && result.code !== 200 && result.code !== 0)) throw new Error('Invalid approval response');
