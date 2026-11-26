@@ -127,3 +127,38 @@ MIT
 ### Per-agent Codex reasoning effort
 
 Set `CODEX_REASONING_EFFORT` in an individual Codex agent’s environment to `low`, `medium`, `high`, or `xhigh` (supported levels depend on the model). Native Codex CLI runs, including resumed sessions and custom Responses providers, receive `-c model_reasoning_effort="<level>"`. Unset or `default` preserves the CLI configuration. This does not change the global Codex configuration. Direct Chat Completions mode does not use this CLI option.
+
+### Owner-approved visitor file moves (Codex)
+
+Visitor DMs use the workspace operation-approval API before choosing a runtime.
+When the visitor differs from the agent owner, the connector uses a fresh isolated
+Codex app-server thread. Its native tools can read the configured working root but
+cannot write or access the network. `request_file_move` asks the owner to approve
+one exact relative source/destination; the connector executes the native move only
+after the server grants a single execution claim. Owner DMs retain their existing
+runtime behavior.
+
+This mode requires macOS or Linux, a local **native Codex executable** supporting
+named permission profiles and dynamic tools (verified with 0.151.0), and `python3`
+with the OS no-overwrite rename primitive. Unsupported versions, npm/WSL script
+shims, custom model providers/endpoints, missing context, and failed isolation
+checks stop the visitor run. The selected model is retained; there is no fallback
+to unrestricted execution or a different model. Isolated credentials are copied
+from the configured `CODEX_HOME` (or the default Codex home); workspace tokens and
+claim tokens are never placed in model prompts. The workspace API endpoint remains
+configurable through the connector's existing endpoint setting.
+
+Use a dedicated absolute working directory, not the user's home or an ancestor of
+credentials/journals. Symlinks, existing destinations, moves of runtime metadata
+(`.git`, `.codex`, `.openagents`), and source trees containing Codex/launcher
+configuration are rejected. Directory moves are supported. The trusted helper
+fingerprints source content and parent state, revalidates after claiming, and uses
+`renameatx_np(RENAME_EXCL)` on macOS or `renameat2(RENAME_NOREPLACE)` on Linux.
+
+Execution records are durably reserved under
+`~/.openagents/operation-journal/<workspace-agent-hash>/`. Do not delete this journal
+to retry an operation. A lost claim response, restart, or uncertain completion is
+never automatically replayed. Pending requests interrupted by restart expire;
+request a fresh approval to try again. If completion reporting fails, the local
+journal preserves the actual outcome while the server displays an unconfirmed
+execution. Attachments are not downloaded in this mode.
