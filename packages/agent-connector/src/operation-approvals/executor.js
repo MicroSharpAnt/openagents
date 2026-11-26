@@ -36,6 +36,7 @@ class OperationExecutor {
     const checkAbort = () => { if (signal?.aborted) throw new Error('Operation stopped'); };
     checkAbort();
     const actualRoot = fs.realpathSync(this.root);
+    if (actualRoot === path.parse(actualRoot).root) throw new Error('Filesystem root exposes host credentials and journal');
     for (const secret of [os.homedir(), path.join(os.homedir(), '.codex'), path.join(os.homedir(), '.openagents'), this.journalDir]) {
       const absolute = path.resolve(secret);
       if (absolute === actualRoot || absolute.startsWith(actualRoot + path.sep)) throw new Error('Work root exposes host credentials or execution journal');
