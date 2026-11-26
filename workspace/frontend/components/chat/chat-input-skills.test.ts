@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ChatInput } from './chat-input';
 import type { LocalSkill } from '@/lib/desktop-host';
 
-const skill = { name: 'unity-mcp', path: '/local/skills/unity/SKILL.md', description: 'Unity tools' };
+const skill = { name: 'unity-mcp', path: '/local/skills/unity/SKILL.md', description: 'Unity tools', content: 'Use the Unity tools to inspect the scene.' };
 vi.mock('./composer-add-menu', () => ({ ComposerAddMenu: ({ onPickSkill }: { onPickSkill: (s: LocalSkill) => void }) => React.createElement('button', { onClick: () => onPickSkill(skill) }, 'pick-skill') }));
 vi.mock('./use-composer-mentions', () => ({ useComposerMentions: () => ({ mentionPeople: [], mentionItems: [], participantEmails: [], selfEmail: '', team: [] }) }));
 vi.mock('@/lib/i18n', () => ({ useT: () => (key: string) => key }));
@@ -17,11 +17,12 @@ beforeEach(() => { send.mockReset(); const host = document.createElement('div');
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ''; });
 async function render(conversationId = 'thread', disabled = false) { await act(async () => root.render(React.createElement(ChatInput, { conversationId, onSend: send, disabled }))); }
 async function click(label: string) { await act(async () => { const button = [...document.querySelectorAll('button')].find(b => b.textContent === label || b.getAttribute('aria-label') === label)!; button.click(); }); }
-it('shows a removable chip, avoids duplicates and transmits the selected instruction path', async () => {
+it('shows a removable chip, avoids duplicates and transmits the selected instructions for an agent on another device', async () => {
   await render(); await click('pick-skill'); await click('pick-skill');
   expect(document.querySelector('[data-composer-skills]')?.textContent).toBe('unity-mcp');
   await click('chatInput.sendMessage');
   expect(send).toHaveBeenCalledOnce();
+  expect(send.mock.calls[0][0]).toContain(skill.content);
   expect(send.mock.calls[0][0]).toContain('"unity-mcp": "/local/skills/unity/SKILL.md"');
   expect(document.querySelector('[data-composer-skills]')).toBeNull();
 });
@@ -63,6 +64,7 @@ it('filters slash skills and Enter selects a chip instead of sending, preserving
   expect(document.querySelector('[data-composer-skills]')?.textContent).toBe('unity-mcp');
   await key('Enter');
   expect(send.mock.calls[0][0]).toContain('/local/skills/unity/SKILL.md');
+  expect(send.mock.calls[0][0]).toContain(skill.content);
   expect(send.mock.calls[0][0].split('\n\n')[0]).toBe('Please use');
 });
 it('navigates slash results with arrows and Tab, and Escape dismisses without changing text', async () => {

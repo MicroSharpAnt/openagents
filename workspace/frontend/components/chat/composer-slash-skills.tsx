@@ -43,6 +43,7 @@ export function ComposerSlashSkills({ id, items, activeIndex, status, onPick }: 
   React.useEffect(() => { document.getElementById(`${id}-${activeIndex}`)?.scrollIntoView?.({ block: 'nearest' }); }, [id, activeIndex, items.length]);
   return <div className="absolute inset-x-0 bottom-full z-50 mb-2 max-h-70 overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
     <div className="px-2 py-1 text-xs text-muted-foreground">{t('chatInput.skills')} · {t('chatInput.skillsKeyboardHint')}</div>
+    <div className="px-2 py-1 text-xs text-muted-foreground">{t('chatInput.skillsLocalHint')}</div>
     {status && <div role="status" className="px-2 py-3 text-sm text-muted-foreground">{t(`chatInput.${status}`)}</div>}
     <div id={id} role="listbox" aria-label={t('chatInput.skills')}>
       {items.map((skill, index) => <button type="button" role="option" id={`${id}-${index}`} aria-selected={activeIndex === index} key={`${skill.source}:${skill.path}`} title={skill.path}

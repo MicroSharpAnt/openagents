@@ -22,9 +22,11 @@ it('discovers agent roots, system skills and flat Harness skills, deduplicating 
   const groups = await listLocalSkills(home, {})
   expect(groups.map(g => g.label)).toEqual(['Codex', 'Claude', 'DeepSeek Harness'])
   expect(groups[0].skills.map(s => s.name)).toEqual(['builtin', 'example'])
-  expect(groups[0].skills.find(s => s.name === 'example')).toEqual({ name: 'example', description: 'Test skill', path: file })
+  expect(groups[0].skills.find(s => s.name === 'example')).toEqual({ name: 'example', description: 'Test skill', path: file, content: await fs.readFile(file, 'utf8') })
   expect(groups[1].skills[0].name).toBe('Review')
+  expect(groups[1].skills[0].content).toContain('Review code')
   expect(groups[2].skills[0].name).toBe('flat')
+  expect(groups[2].skills[0].content).toBe('Flat skill')
 })
 it('honors configured homes and handles missing roots without creating directories', async () => {
   const home = await fixture()

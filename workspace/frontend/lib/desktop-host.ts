@@ -13,6 +13,8 @@ export interface LocalSkill {
   name: string;
   path: string;
   description: string;
+  /** Instruction snapshot; older launchers return only metadata. */
+  content?: string;
 }
 export interface LocalSkillGroup {
   id: string;
@@ -23,7 +25,7 @@ export interface LocalSkillGroup {
 }
 
 export interface DesktopHost {
-  /** Local skill metadata only; available on newer desktop launchers. */
+  /** Local skills with instruction snapshots; available on newer desktop launchers. */
   listLocalSkills?(): Promise<LocalSkillGroup[]>;
   openComputer(): void;
   signIn(): void;

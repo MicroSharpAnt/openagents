@@ -706,7 +706,7 @@ export const messages: Messages = {
     skillsUnavailable: '无法读取技能目录',
     skillsDesktopOnly: '本机技能需要使用新版桌面客户端',
     skillsLoadFailed: '技能读取失败，请重新打开菜单重试',
-    skillsLocalHint: '此电脑上的技能',
+    skillsLocalHint: '选中技能的指令正文将随消息发送',
 
     placeholder: '发送消息…',
     placeholderWithMentions: '发送消息…(用 @ 提及成员、智能体或知识库)',

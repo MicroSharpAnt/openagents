@@ -6,6 +6,7 @@ export interface LocalSkill {
   name: string
   path: string
   description: string
+  content: string
 }
 export interface LocalSkillGroup {
   id: string
@@ -39,7 +40,7 @@ export async function listLocalSkills(home = os.homedir(), env = process.env): P
           return /^[>|]/.test(value) ? '' : value.replace(/^['"]|['"]$/g, '').slice(0, 300)
         }
         seen.add(real)
-        skills.push({ name: scalar('name') || (path.basename(file) === 'SKILL.md' ? path.basename(path.dirname(file)) : path.basename(file, '.md')), path: file, description: scalar('description') })
+        skills.push({ name: scalar('name') || (path.basename(file) === 'SKILL.md' ? path.basename(path.dirname(file)) : path.basename(file, '.md')), path: file, description: scalar('description'), content: text })
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') unavailable = true
       }

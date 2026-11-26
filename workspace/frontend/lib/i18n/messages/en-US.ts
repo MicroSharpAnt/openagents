@@ -714,7 +714,7 @@ export const messages = {
     skillsUnavailable: 'Could not read skill directory',
     skillsDesktopOnly: 'Local skills require the updated desktop app',
     skillsLoadFailed: 'Could not load skills. Reopen this menu to retry.',
-    skillsLocalHint: 'Skills on this computer',
+    skillsLocalHint: 'Selected skill instructions are sent with your message',
 
     placeholder: 'Message...',
     placeholderWithMentions: 'Message... (use @ to mention people, agents or knowledge)',
