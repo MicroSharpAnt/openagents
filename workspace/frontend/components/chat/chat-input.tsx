@@ -10,6 +10,10 @@ import { useT } from '@/lib/i18n';
 import { extractMentionedAgents, extractMentionedHumans } from '@/lib/people-mentions';
 import { humanMentionDisplay, editHumanMentionDraft, updateHumanMentionDraft } from './composer-human-mentions';
 import { ComposerAddMenu } from './composer-add-menu';
+import { ComposerSlashSkills, skillQueryAt, useSlashSkills, type SkillQuery } from './composer-slash-skills';
+import { ComposerSkillChips } from './composer-skills';
+import { withSkillReferences } from './skill-references';
+import type { LocalSkill } from '@/lib/desktop-host';
 import { ComposerAttachments } from './composer-attachments';
 import { ComposerMentionMenu } from './composer-mention-menu';
 import { FILE_ACCEPT, useComposerFiles, type PendingFile } from './use-composer-files';
@@ -39,7 +43,16 @@ interface ChatInputProps {
 
 export function ChatInput({ conversationId, onSend, disabled, className, agents = [], knowledge = [], draft, onDraftChange, onFocusChange, focusKey, onCreateRoutine, hint }: ChatInputProps) {
   const t = useT();
+  const [skillDrafts, setSkillDrafts] = React.useState<Record<string, LocalSkill[]>>({});
+  const skillKey = conversationId ?? '__new__';
+  const skills = skillDrafts[skillKey] ?? [];
+  const setSkills = (next: LocalSkill[]) => setSkillDrafts(current => ({ ...current, [skillKey]: next }));
   const [message, setMessage] = React.useState(draft ?? '');
+  const [slashQuery, setSlashQuery] = React.useState<SkillQuery | null>(null);
+  const [slashIndex, setSlashIndex] = React.useState(0);
+  const slashId = React.useId();
+  const slash = useSlashSkills(!!slashQuery, slashQuery?.filter ?? '');
+  React.useEffect(() => { setSlashQuery(null); }, [conversationId]);
   const [showMentions, setShowMentions] = React.useState(false);
   const [mentionFilter, setMentionFilter] = React.useState('');
   const [mentionIndex, setMentionIndex] = React.useState(0);
@@ -90,16 +103,18 @@ export function ChatInput({ conversationId, onSend, disabled, className, agents 
   }, [focusKey]);
 
   const agentNames = agents.map((a) => a.agentName);
-  const hasContent = !!message.trim() || files.pendingFiles.length > 0;
+  const hasContent = !!message.trim() || files.pendingFiles.length > 0 || skills.length > 0;
   const canSend = hasContent && !disabled;
 
   const handleSend = () => {
     const trimmed = message.trim();
-    if (!trimmed && files.pendingFiles.length === 0) return;
+    if (!trimmed && files.pendingFiles.length === 0 && skills.length === 0) return;
     if (disabled) return;
     const mentioned = extractMentionedAgents(trimmed, agentNames);
     const mentionedHumans = extractMentionedHumans(trimmed, mentions.participantEmails, mentions.selfEmail);
-    onSend(trimmed, mentioned, files.pendingFiles, mentionedHumans);
+    onSend(withSkillReferences(trimmed, skills), mentioned, files.pendingFiles, mentionedHumans);
+    setSkills([]);
+    setSlashQuery(null);
     setMessage('');
     onDraftChange?.('');
     files.clearFiles();
@@ -143,9 +158,37 @@ export function ChatInput({ conversationId, onSend, disabled, className, agents 
     }
   };
 
+  const pickSlashSkill = (skill: LocalSkill) => {
+    if (!slashQuery) return;
+    if (!skills.some(item => item.path === skill.path)) setSkills([...skills, skill]);
+    const next = editHumanMentionDraft(message, mentionPeople, slashQuery.start, slashQuery.end, '');
+    setMessage(next);
+    onDraftChange?.(next);
+    const cursor = slashQuery.start;
+    setSlashQuery(null);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(cursor, cursor);
+    });
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Ignore Enter during IME composition (Chinese, Japanese, Korean input)
     if (e.nativeEvent.isComposing || e.key === 'Process') return;
+
+    if (slashQuery) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setSlashQuery(null); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (slash.items.length) setSlashIndex(index => (index + (e.key === 'ArrowDown' ? 1 : -1) + slash.items.length) % slash.items.length);
+        return;
+      }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+        e.preventDefault();
+        if (slash.items[slashIndex]) pickSlashSkill(slash.items[slashIndex]);
+        return;
+      }
+    }
 
     if (showMentions && mentionItems.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -189,6 +232,10 @@ export function ChatInput({ conversationId, onSend, disabled, className, agents 
     setMessage(nextDraft);
     onDraftChange?.(nextDraft);
 
+    const query = skillQueryAt(value, e.target.selectionStart);
+    setSlashQuery(query);
+    setSlashIndex(0);
+    if (query) { setShowMentions(false); return; }
     const textBefore = value.slice(0, e.target.selectionStart);
     // [^\s@] (not \w) so typing a display name like "@小明" keeps the
     // picker open while filtering; the inserted mention is still ASCII.
@@ -206,7 +253,8 @@ export function ChatInput({ conversationId, onSend, disabled, className, agents 
 
   return (
     <div className={cn('relative', className)} {...files.dragHandlers}>
-      {showMentions && mentionItems.length > 0 && (
+      {slashQuery && <ComposerSlashSkills id={slashId} items={slash.items} activeIndex={slashIndex} status={slash.status} onPick={pickSlashSkill} />}
+      {!slashQuery && showMentions && mentionItems.length > 0 && (
         <ComposerMentionMenu
           offerAll={mentions.offerAll}
           people={mentions.filteredPeople}
@@ -245,6 +293,11 @@ export function ChatInput({ conversationId, onSend, disabled, className, agents 
             {hint}
           </InputGroupAddon>
         )}
+        {skills.length > 0 && (
+          <InputGroupAddon align="block-start" className="cursor-default select-auto">
+            <ComposerSkillChips skills={skills} onRemove={path => setSkills(skills.filter(skill => skill.path !== path))} />
+          </InputGroupAddon>
+        )}
         {files.pendingFiles.length > 0 && (
           <InputGroupAddon align="block-start" className="cursor-default select-auto">
             <ComposerAttachments files={files.pendingFiles} onRemove={files.removeFile} />
@@ -258,16 +311,22 @@ export function ChatInput({ conversationId, onSend, disabled, className, agents 
           onKeyDown={handleKeyDown}
           onPaste={files.handlePaste}
           onFocus={() => { setIsFocused(true); onFocusChange?.(true); }}
-          onBlur={() => { setIsFocused(false); onFocusChange?.(false); }}
+          onBlur={() => { setSlashQuery(null); setIsFocused(false); onFocusChange?.(false); }}
           placeholder={canMention ? t('chatInput.placeholderWithMentions') : t('chatInput.placeholder')}
           rows={1}
           disabled={disabled}
+          aria-controls={slashQuery ? slashId : undefined}
+          aria-autocomplete="list"
+          aria-activedescendant={slashQuery && slash.items[slashIndex] ? `${slashId}-${slashIndex}` : undefined}
           data-chat-input
           className="min-h-0 p-3"
         />
 
         <InputGroupAddon align="block-end">
-          <ComposerAddMenu onPickFile={files.openFilePicker} onCreateRoutine={onCreateRoutine} />
+          <ComposerAddMenu onPickFile={files.openFilePicker} onCreateRoutine={onCreateRoutine} skills={skills} onPickSkill={skill => {
+              if (!skills.some(item => item.path === skill.path)) setSkills([...skills, skill]);
+              requestAnimationFrame(() => textareaRef.current?.focus());
+            }} />
 
           <div className="ml-auto flex items-center gap-2">
             {/* Keyboard affordance for the global 'type anywhere' shortcut */}

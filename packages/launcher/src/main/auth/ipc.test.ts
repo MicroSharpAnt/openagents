@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 
 const fakes = vi.hoisted(() => ({
+  listLocalSkills: vi.fn().mockResolvedValue([]),
   handlers: new Map<string, (...args: any[]) => any>(),
   listeners: new Map<string, (...args: any[]) => any>(),
   accountDeps: null as null | { onChange: (info: unknown) => void },
@@ -22,6 +23,7 @@ const fakes = vi.hoisted(() => ({
   nudgeNode: vi.fn(),
   pushNotification: vi.fn(),
 }))
+vi.mock("../local-skills", () => ({ listLocalSkills: fakes.listLocalSkills }))
 vi.mock("electron", () => ({
   ipcMain: {
     handle: (name: string, handler: (...args: any[]) => any) => fakes.handlers.set(name, handler),
@@ -119,7 +121,7 @@ it("shows the latest workspace request even if an earlier refresh is slower", as
   await fakes.handlers.get("workspace-view:show")!({}, "latest", bounds)
   finish()
   await earlier
-  expect(fakes.show).toHaveBeenCalledExactlyOnceWith("latest", bounds, null, null, null)
+  expect(fakes.show).toHaveBeenCalledExactlyOnceWith("latest", bounds, null, null, null, null)
 })
 
 it("ends the page and wipes its storage however the account ends", () => {
@@ -264,4 +266,14 @@ it("hands the page the web origin its shared links must carry", () => {
   const event: { returnValue?: { webUrl?: string } } = {}
   fakes.listeners.get("workspace-view:config")!(event)
   expect(event.returnValue?.webUrl).toBe("https://workspace.openagents.org")
+})
+
+it("only exposes local skill metadata to a hosted workspace view", async () => {
+  const read = fakes.handlers.get("workspace-view:local-skills")!
+  fakes.isWorkspaceSender.mockReturnValue(false)
+  await expect(read({})).rejects.toThrow("Invalid workspace skill request")
+  expect(fakes.listLocalSkills).not.toHaveBeenCalled()
+  fakes.isWorkspaceSender.mockReturnValue(true)
+  await expect(read({})).resolves.toEqual([])
+  expect(fakes.listLocalSkills).toHaveBeenCalledOnce()
 })

@@ -1,4 +1,5 @@
 import { ipcMain, type BrowserWindow } from "electron"
+import { listLocalSkills } from "../local-skills"
 
 import {
   isThemeMode,
@@ -286,6 +287,10 @@ export function registerAccountIpc(deps: AccountIpcDeps): AccountManager {
     deviceType: status.deviceType,
     nodeId: status.workspaces.find((entry) => entry.workspaceId === workspaceId)?.nodeId ?? null,
     warning,
+  })
+  ipcMain.handle("workspace-view:local-skills", async (event) => {
+    if (!host.isWorkspaceSender(event.sender)) throw new Error("Invalid workspace skill request")
+    return listLocalSkills()
   })
   ipcMain.handle("workspace-view:computer-status", async (event, workspaceId: unknown) => {
     const id = validateComputerRequest(event, workspaceId)

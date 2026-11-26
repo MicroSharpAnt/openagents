@@ -1001,3 +1001,32 @@ describe('Codex — an endpoint with a long list of models', () => {
     assert.match(detail, /This endpoint serves vendor-model-0, .*…\./);
   });
 });
+
+describe('Codex per-agent reasoning effort', () => {
+  async function command(effort, resume = false) {
+    let invocation;
+    const fake = Object.assign(Object.create(CodexAdapter.prototype), {
+      agentEnv: effort === undefined ? {} : { CODEX_REASONING_EFFORT: effort },
+      workspaceModel: null, _directModel: 'test-model', _directApiKey: '', _directBaseUrl: '',
+      _codexBin: 'codex', _channelThreads: resume ? { general: 'existing-thread' } : {}, workingDir: '',
+      _buildSystemContext: () => 'system context', _log: () => {},
+      _spawnCodex: async (cmd) => { invocation = cmd; return { responseText: 'ok', exitCode: 0 }; },
+      sendResponse: async () => {},
+    });
+    await fake._handleViaSubprocess('hello', 'general');
+    return invocation;
+  }
+  it('passes independent effort overrides on fresh and resumed subscription runs', async () => {
+    const first = await command('high');
+    const second = await command('low', true);
+    assert.ok(first.includes('model_reasoning_effort="high"'));
+    assert.ok(second.includes('model_reasoning_effort="low"'));
+    assert.ok(second.indexOf('model_reasoning_effort="low"') < second.indexOf('resume'));
+    assert.ok(!second.includes('model_reasoning_effort="high"'));
+  });
+  it('omits the override for unset or default instead of modifying CLI configuration', async () => {
+    for (const value of [undefined, '', 'default']) {
+      assert.ok(!(await command(value)).some(arg => arg.startsWith('model_reasoning_effort=')));
+    }
+  });
+});

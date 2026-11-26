@@ -9,7 +9,22 @@ export interface DesktopComputer {
   warning: boolean;
 }
 
+export interface LocalSkill {
+  name: string;
+  path: string;
+  description: string;
+}
+export interface LocalSkillGroup {
+  id: string;
+  label: string;
+  directories: string[];
+  skills: LocalSkill[];
+  unavailable: boolean;
+}
+
 export interface DesktopHost {
+  /** Local skill metadata only; available on newer desktop launchers. */
+  listLocalSkills?(): Promise<LocalSkillGroup[]>;
   openComputer(): void;
   signIn(): void;
   signOut(): void;

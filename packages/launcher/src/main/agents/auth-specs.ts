@@ -169,6 +169,13 @@ const LAUNCHER_AUTH_OVERRIDES: Record<
         "Model name — leave empty to use the Codex CLI's default, or pick one from the list (which is loaded from your signed-in account or your relay)",
       required: true,
     },
+    {
+      name: "CODEX_REASONING_EFFORT",
+      description: "Reasoning effort for this agent's Codex CLI runs. Default keeps the CLI configuration; supported levels depend on the model.",
+      required: false,
+      default: "default",
+      options: ["default", "low", "medium", "high", "xhigh"],
+    },
   ],
   // Credentials first, then the endpoint, then the model: the model list is
   // loaded FROM the key + base URL, so a picker sitting above them can only

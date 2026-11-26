@@ -239,7 +239,7 @@ export function LocalConfigurationFields({ type, name, catalog, onChange, onChan
   }, [signInRequest, loading])
   if (loading) return <Spinner />
   const keyForm = !loginCmd || authTab === "key"
-  const loginModels = keyForm ? [] : fields.filter((field) => hasModelPicker(type, field.name))
+  const loginModels = keyForm ? [] : fields.filter((field) => hasModelPicker(type, field.name) || (type === "codex" && field.name === "CODEX_REASONING_EFFORT"))
   // The adapter uses the CLI for native OpenAI and sign-in. Only a custom
   // key endpoint chooses between its Responses CLI provider and direct chat.
   const codexBaseUrl = values.OPENAI_BASE_URL || ""
@@ -272,7 +272,7 @@ export function LocalConfigurationFields({ type, name, catalog, onChange, onChan
         }).catch((err) => setError(String(err))).finally(() => setInstalling(false))
       }} /></div>}
     <AgentEnvFields agentType={type} modelPath={keyForm ? "key" : "login"} modelReloadKey={String(loggedIn)}
-      fields={keyForm ? fields : loginModels}
+      fields={keyForm ? fields.filter((field) => field.name !== "CODEX_REASONING_EFFORT" || !customCodex || codexWireApi === "responses") : loginModels}
       values={values} onChange={change} onImport={keyForm ? importValues : undefined} besideModel={workingDirectory && <SetupWorkdirField {...workingDirectory} />}
       focusField={invalid} errors={invalid ? { [invalid.name]: t("agents.envFields.required", { name: invalid.name }) } : undefined} />
     {!keyForm && loginModels.length > 0 && <p className="m-0 text-xs text-muted-foreground">

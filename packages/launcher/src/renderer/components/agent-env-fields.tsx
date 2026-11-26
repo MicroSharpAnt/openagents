@@ -28,7 +28,7 @@ import {
 import { PasswordInput } from "@renderer/components/ui-kit"
 import { ImportCredentialsPrompt } from "@renderer/components/credential-import/import-credentials-prompt"
 import { ModelField } from "@renderer/components/model-field"
-import { envFieldHint, envFieldPlaceholder } from "@renderer/lib/agent-meta"
+import { envFieldHint, envFieldPlaceholder, envFieldLabel } from "@renderer/lib/agent-meta"
 import { hasModelPicker } from "@renderer/lib/model-fields"
 import { cn } from "@renderer/lib/utils"
 import type { EnvField, ModelListPath } from "@renderer/types"
@@ -163,7 +163,7 @@ export function AgentEnvFields({
     return (
       <Field key={f.name} data-invalid={invalid || undefined}>
         <FieldLabel htmlFor={id} className="font-mono text-xs">
-          {f.name}
+          {f.name === "CODEX_REASONING_EFFORT" ? envFieldLabel(f, t) : f.name}
           {/* `.required` is asserted against in tests — keep the marker a
               distinct element rather than folding it into the label text. */}
           {f.required && <span className="required"> *</span>}
@@ -199,7 +199,7 @@ export function AgentEnvFields({
               <SelectGroup>
                 {f.options.map((option) => (
                   <SelectItem key={option} value={option}>
-                    {option}
+                    {f.name === "CODEX_REASONING_EFFORT" && option === "default" ? t("agentMeta.env.CODEX_REASONING_EFFORT.defaultLabel") : option}
                   </SelectItem>
                 ))}
               </SelectGroup>

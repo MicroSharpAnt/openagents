@@ -535,9 +535,13 @@ class CodexAdapter extends BaseAdapter {
           '-c', `model_providers.openagents.env_key=${q('OPENAI_API_KEY')}`,
           '-c', `model_providers.openagents.wire_api=${q('responses')}`,
         );
-        if (this._customProvider.reasoningEffort) {
-          cmd.push('-c', `model_reasoning_effort=${q(this._customProvider.reasoningEffort)}`);
-        }
+      }
+
+      // Per-agent override for subscription login, native API and custom
+      // Responses providers alike. Never write to the user's config.toml.
+      const effort = String(env.CODEX_REASONING_EFFORT || this._customProvider?.reasoningEffort || '').trim().toLowerCase();
+      if (effort && effort !== 'default') {
+        cmd.push('-c', `model_reasoning_effort=${JSON.stringify(effort)}`);
       }
 
       // Working directory

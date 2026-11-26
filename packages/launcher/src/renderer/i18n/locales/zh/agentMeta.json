@@ -90,6 +90,11 @@
       "label": "服务商",
       "hint": "服务商 id（cline、anthropic、openai、openrouter…）。留空则使用 Cline 的默认配置。"
     },
+    "CODEX_REASONING_EFFORT": {
+      "label": "推理强度",
+      "hint": "仅用于此智能体的 Codex CLI 调用，不修改全局配置。默认沿用 CLI 配置；模型支持的档位可能不同。",
+      "defaultLabel": "默认（沿用 CLI 配置）"
+    },
     "CODEX_MODEL": {
       "label": "模型名称",
       "hint": "模型名称。使用中转或代理时通常需要改成对方支持的模型名。"

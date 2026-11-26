@@ -10,11 +10,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useT } from '@/lib/i18n';
+import { ComposerSkillMenu } from './composer-skills';
+import type { LocalSkill } from '@/lib/desktop-host';
 import { WithTooltip } from '@/components/ui/with-tooltip';
 
 /** Everything in the composer that isn't typing or sending lives behind the `+`. */
-export function ComposerAddMenu({ onPickFile, onCreateRoutine }: {
+export function ComposerAddMenu({ onPickFile, onCreateRoutine, skills = [], onPickSkill }: {
   onPickFile: (accept?: string) => void;
+  skills?: LocalSkill[];
+  onPickSkill?: (skill: LocalSkill) => void;
   onCreateRoutine?: () => void;
 }) {
   const t = useT();
@@ -42,6 +46,7 @@ export function ComposerAddMenu({ onPickFile, onCreateRoutine }: {
             <ImageIcon />
             {t('chatInput.attachImage')}
           </DropdownMenuItem>
+          {onPickSkill && <ComposerSkillMenu selected={skills} onPick={onPickSkill} />}
           {onCreateRoutine && (
             <DropdownMenuItem onSelect={() => onCreateRoutine()}>
               <CalendarClock />

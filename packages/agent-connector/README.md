@@ -123,3 +123,7 @@ before. Set `OPENAGENTS_AGENT_STREAM=0` to always poll.
 ## License
 
 MIT
+
+### Per-agent Codex reasoning effort
+
+Set `CODEX_REASONING_EFFORT` in an individual Codex agent’s environment to `low`, `medium`, `high`, or `xhigh` (supported levels depend on the model). Native Codex CLI runs, including resumed sessions and custom Responses providers, receive `-c model_reasoning_effort="<level>"`. Unset or `default` preserves the CLI configuration. This does not change the global Codex configuration. Direct Chat Completions mode does not use this CLI option.

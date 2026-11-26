@@ -132,6 +132,7 @@ describe("LocalConfigurationFields — signing in instead of a key", () => {
     { name: "OPENAI_API_KEY", password: true },
     { name: "OPENAI_BASE_URL" },
     { name: "CODEX_MODEL" },
+    { name: "CODEX_REASONING_EFFORT", default: "default", options: ["default", "low", "medium", "high", "xhigh"] },
   ] as EnvField[]
   const TYPE_ENV = { OPENAI_API_KEY: "sk-old", OPENAI_BASE_URL: "https://relay.example/v1", CODEX_MODEL: "openai-gpt-oss-20b" }
 
@@ -154,6 +155,17 @@ describe("LocalConfigurationFields — signing in instead of a key", () => {
     return onChange
   }
   const last = (onChange: ReturnType<typeof open>) => onChange.mock.calls.at(-1)?.[0]
+
+  it("shows and saves the instance reasoning effort on the CLI-login tab", async () => {
+    const onChange = open("codex-2", {}, { OPENAGENTS_AUTH_MODE: "cli_login", CODEX_REASONING_EFFORT: "medium" })
+    await screen.findByTestId("auth-tab-cli")
+    const user = userEvent.setup()
+    await waitFor(() => expect(document.querySelector("[id$='-CODEX_REASONING_EFFORT']")).toBeTruthy())
+    await user.click(document.querySelector<HTMLElement>("[id$='-CODEX_REASONING_EFFORT']")!)
+    await user.click(await screen.findByRole("option", { name: "high", exact: true }))
+    await waitFor(() => expect(last(onChange)?.values.CODEX_REASONING_EFFORT).toBe("high"))
+    expect(last(onChange)?.authTab).toBe("cli")
+  })
 
   it("a new agent on the sign-in tab does not take the model saved with the type's key", async () => {
     const onChange = open(undefined, { CODEX_MODEL: "openai-gpt-oss-20b" })

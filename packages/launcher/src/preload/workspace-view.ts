@@ -149,6 +149,7 @@ contextBridge.exposeInMainWorld("__oaHost__", {
   },
   /** Switch to the newer bundle. The launcher reloads every page onto it. */
   applyBundleUpdate: () => ipcRenderer.send("workspace-view:bundle-apply"),
+  listLocalSkills: () => ipcRenderer.invoke("workspace-view:local-skills"),
   openComputer: () => ipcRenderer.send("workspace-view:open-computer"),
   signIn: () => ipcRenderer.send("workspace-view:sign-in"),
   signOut: () => ipcRenderer.send("workspace-view:sign-out"),

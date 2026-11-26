@@ -705,6 +705,17 @@ export const messages = {
     workflowsBanner: 'Meet Workflows — chain agents into multi-step pipelines that hand work to each other.',
   },
   chatInput: {
+    skillsNoMatches: 'No matching skills',
+    skillsKeyboardHint: '↑↓ navigate · Enter/Tab select · Esc close',
+
+    skills: 'Skills',
+    skillsLoading: 'Loading skills…',
+    skillsEmpty: 'No skills found',
+    skillsUnavailable: 'Could not read skill directory',
+    skillsDesktopOnly: 'Local skills require the updated desktop app',
+    skillsLoadFailed: 'Could not load skills. Reopen this menu to retry.',
+    skillsLocalHint: 'Skills on this computer',
+
     placeholder: 'Message...',
     placeholderWithMentions: 'Message... (use @ to mention people, agents or knowledge)',
     dropFilesHere: 'Drop files here',

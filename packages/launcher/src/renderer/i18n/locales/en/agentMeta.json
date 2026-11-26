@@ -90,6 +90,11 @@
       "label": "Provider",
       "hint": "Provider id (cline, anthropic, openai, openrouter, …). Leave blank for Cline's configured default."
     },
+    "CODEX_REASONING_EFFORT": {
+      "label": "Reasoning effort",
+      "hint": "Applies only to this agent’s Codex CLI runs, without changing global configuration. Default keeps the CLI setting; supported levels depend on the model.",
+      "defaultLabel": "Default (CLI configuration)"
+    },
     "CODEX_MODEL": {
       "label": "Model",
       "hint": "Model name. Change it when using a relay or proxy — their channels rarely match the default."

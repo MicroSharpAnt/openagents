@@ -60,7 +60,7 @@ function hasMissingRequired(
 
 /** What the sign-in path asks for: the model, never a credential. */
 function loginFields(entry: OnboardingAgent): EnvField[] {
-  return entry.envFields.filter((f) => hasModelPicker(entry.name, f.name))
+  return entry.envFields.filter((f) => hasModelPicker(entry.name, f.name) || (entry.name === "codex" && f.name === "CODEX_REASONING_EFFORT"))
 }
 
 /**

@@ -697,6 +697,17 @@ export const messages: Messages = {
     workflowsBanner: '认识工作流 — 将多个智能体串成多步流水线，自动交接工作。',
   },
   chatInput: {
+    skillsNoMatches: '没有匹配的技能',
+    skillsKeyboardHint: '↑↓ 选择 · Enter/Tab 确认 · Esc 关闭',
+
+    skills: 'Skills',
+    skillsLoading: '正在读取技能…',
+    skillsEmpty: '此目录暂无技能',
+    skillsUnavailable: '无法读取技能目录',
+    skillsDesktopOnly: '本机技能需要使用新版桌面客户端',
+    skillsLoadFailed: '技能读取失败，请重新打开菜单重试',
+    skillsLocalHint: '此电脑上的技能',
+
     placeholder: '发送消息…',
     placeholderWithMentions: '发送消息…(用 @ 提及成员、智能体或知识库)',
     dropFilesHere: '拖放文件到此处',
