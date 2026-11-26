@@ -60,7 +60,7 @@ describe('recent shared thread history', () => {
   it('does not load shared history for DMs or synthetic nudges', async () => {
     const a = adapter([]);
     a.client.getRecentMessages = async () => assert.fail('unexpected read');
-    await a._channelWorker('dm:human:Maya', { ...current, sessionId: 'dm:human:Maya' });
+    await a._channelWorker('dm:openagents:Sam', { ...current, sessionId: 'dm:openagents:Sam' });
     await a._channelWorker('general', { ...current, messageId: '' });
     assert.equal(a.handled[0].content, current.content); assert.equal(a.handled[1].content, current.content);
   });

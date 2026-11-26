@@ -572,7 +572,8 @@ class WorkspaceClient {
    * default: one tool-heavy agent turn posts dozens of them into the same
    * channel, and filtering only after the fetch left a "100 event" window
    * holding a handful of real chat messages (OA-026). Pass
-   * `excludeMessageTypes: ''` to get every event.
+   * `excludeMessageTypes: ''` to get every event. Canonical `dm:a,b` keys
+   * use the exact conversation filter and retain that key in returned messages.
    */
   async getRecentMessages(workspaceId, channelName, token, limit = 30, {
     sort = 'desc', before, timeout, throwOnError = false, excludeMessageTypes = RECENT_MESSAGES_EXCLUDED_TYPES,
@@ -585,6 +586,11 @@ class WorkspaceClient {
         sort,
         limit: String(limit),
       });
+      const conversation = channelName?.startsWith('dm:') && channelName.includes(',') ? channelName.slice(3) : null;
+      if (conversation) {
+        params.delete('channel');
+        params.set('conversation', conversation);
+      }
       if (before) params.set('before', before);
       if (excludeMessageTypes) params.set('exclude_message_types', excludeMessageTypes);
       const data = await this._get(`/v1/events?${params}`, this._wsHeaders(token), timeout);
@@ -593,7 +599,11 @@ class WorkspaceClient {
       // A desc window arrives newest-first; reverse so the caller always gets
       // chronological order. An asc window is already chronological.
       const ordered = sort === 'asc' ? events.slice() : events.slice().reverse();
-      return ordered.map((e) => this._eventToMessage(e));
+      // Recheck exact pairs locally before exposing credentialed history to a model.
+      // Owner replies retain their human speaker but group under server-authorized dm_agent.
+      return ordered.filter(e => !conversation || (e.visibility === 'direct'
+        && [e.metadata?.dm_agent || e.source, e.target].sort().join(',') === conversation))
+        .map(e => ({ ...this._eventToMessage(e), ...(conversation ? { sessionId: channelName } : {}) }));
     } catch (error) {
       if (throwOnError) throw error;
       return [];

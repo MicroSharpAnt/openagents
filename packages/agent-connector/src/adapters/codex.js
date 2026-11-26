@@ -26,6 +26,7 @@ const https = require('https');
 
 const { whereBinary } = require('../paths');
 const BaseAdapter = require('./base');
+const { buildThreadHistory } = require('./thread-history');
 const { ApprovalClient } = require('../operation-approvals/client');
 const { OperationExecutor } = require('../operation-approvals/executor');
 const { runControlledCodex } = require('../operation-approvals/codex-runtime');
@@ -466,14 +467,15 @@ class CodexAdapter extends BaseAdapter {
 
     // A DM's canonical participant/owner context is authoritative, not sender text.
     // Check every DM (including continuations) before selecting any execution mode.
-    if (BaseAdapter.isHumanAgentDm(msgChannel)) {
+    const operationSession = this.operationSessionId(msgChannel);
+    if (operationSession) {
       try {
         const api = new ApprovalClient({ endpoint: this.endpoint, network: this.workspaceId, token: this.token, agentName: this.agentName });
-        const ctx = await api.context(msgChannel);
+        const ctx = await api.context(operationSession);
         if (typeof ctx.required !== 'boolean' || typeof ctx.paused !== 'boolean' || !ctx.owner_email || !ctx.visitor_email) throw new Error('Invalid approval context');
         if (ctx.paused) return;
         if (ctx.required) {
-          await this._handleControlledVisitor(msg, msgChannel, api);
+          await this._handleControlledVisitor(msg, msgChannel, api, operationSession);
           return;
         }
       } catch (error) {
@@ -493,7 +495,7 @@ class CodexAdapter extends BaseAdapter {
     }
   }
 
-  async _handleControlledVisitor(msg, channel, api) {
+  async _handleControlledVisitor(msg, channel, api, operationSession) {
     if (!this._useCliMode || !this._codexBin) throw new Error('Controlled visitor mode requires the local Codex runtime');
     if (this._stoppedBeforeStart(channel)) return;
     const identity = require('crypto').createHash('sha256').update(this.workspaceId + '\0' + this.agentName).digest('hex');
@@ -509,11 +511,18 @@ class CodexAdapter extends BaseAdapter {
       shared?.apply && shared.shared_instructions ? `Owner-reviewed instructions (operation approval is handled by the trusted dynamic tool):\n${shared.shared_instructions}` : '',
       ...(shared?.apply && Array.isArray(shared.allowed_knowledge) ? shared.allowed_knowledge.map(k => `Allowed knowledge: ${k.title || k.slug || ''}\n${k.content || ''}`) : []),
     ].filter(Boolean).join('\n\n');
+    // Fresh read-only threads need host-fetched history; never reuse an owner thread
+    // or give the model workspace credentials to recover its own conversation.
+    const messages = msg.messageId ? await this.client.getRecentMessages(this.workspaceId, operationSession, this.token, 30, {
+      before: msg.messageId, timeout: 5000, throwOnError: true,
+    }) : [];
+    const history = buildThreadHistory(messages, operationSession, msg, { historyToolAvailable: false });
+    if (this._stoppedBeforeStart(channel)) return;
     const content = msg.originalContent === undefined ? msg.content : msg.originalContent;
     const result = await runControlledCodex({
       bin: this._codexBin, root: this.workingDir, env: this.agentEnv || process.env,
       model: this._effectiveModel(), customProvider: this._customProvider,
-      prompt: `${context}\n\nUser message:\n${content || ''}${(msg.attachments || []).length ? '\nAttachments are not downloaded in controlled visitor mode. Work only with existing files inside the configured root.' : ''}`, executor, sessionId: channel,
+      prompt: `${context}\n\n${history}User message:\n${content || ''}${(msg.attachments || []).length ? '\nAttachments are not downloaded in controlled visitor mode. Work only with existing files inside the configured root.' : ''}`, executor, sessionId: operationSession,
       onProcess: proc => { if (proc) this._channelProcesses[channel] = proc; else delete this._channelProcesses[channel]; },
     });
     if (result.responseText) await this.sendResponse(channel, result.responseText);

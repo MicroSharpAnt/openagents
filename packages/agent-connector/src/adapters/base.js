@@ -1675,7 +1675,6 @@ class BaseAdapter {
 
   /** Gate canonical human/agent DMs before any adapter-specific execution. */
   async _operationContextAllowsRun(channel) {
-    if (!BaseAdapter.isHumanAgentDm(channel)) return true;
     const api = new ApprovalClient({ endpoint: this.endpoint, network: this.workspaceId, token: this.token, agentName: this.agentName });
     const ctx = await api.context(channel);
     if (typeof ctx.required !== 'boolean' || typeof ctx.paused !== 'boolean' || !ctx.owner_email || !ctx.visitor_email) throw new Error('Invalid operation approval context');
@@ -1686,11 +1685,20 @@ class BaseAdapter {
     return true;
   }
 
-  static isHumanAgentDm(channel) {
-    if (typeof channel !== 'string' || !channel.startsWith('dm:')) return false;
+  /** Resolve transport peer IDs to the backend's canonical pair without changing reply routing. */
+  operationSessionId(channel) {
+    if (typeof channel !== 'string' || !channel.startsWith('dm:')) return null;
     const parts = channel.slice(3).split(',');
-    return parts.length === 2 && parts.some(p => p.startsWith('human:') && p.includes('@'))
-      && parts.some(p => p.startsWith('openagents:') && p.length > 11);
+    const agent = p => /^openagents:[^,\s]+$/.test(p);
+    const human = p => /^human:[^,\s@]+@[^,\s@]+$/.test(p);
+    if ((parts.length === 1 || parts.length === 2) && parts.every(agent)) return null;
+    if (parts.length === 1 && human(parts[0]) && agent(`openagents:${this.agentName}`)) {
+      return `dm:${[parts[0], `openagents:${this.agentName}`].sort().join(',')}`;
+    }
+    if (parts.length === 2 && parts.filter(human).length === 1 && parts.filter(agent).length === 1) {
+      return `dm:${parts.sort().join(',')}`;
+    }
+    throw new Error('Invalid or ambiguous visitor DM identity; execution unavailable');
   }
 
   async _channelWorker(channel, msg) {
@@ -1728,7 +1736,8 @@ class BaseAdapter {
         if (this._sharedContextCandidate(current)) await this._applySharedContext(channel, current);
         // Checked after the round trips above, which a stop can land inside:
         // a message from before the stop never reaches the CLI.
-        const operationAllowed = BaseAdapter.isHumanAgentDm(channel) ? await this._operationContextAllowsRun(channel) : true;
+        const operationSession = this.operationSessionId(channel);
+        const operationAllowed = operationSession ? await this._operationContextAllowsRun(operationSession) : true;
         if (generation !== this._stopGenerationFor(channel)) {
           dropped++;
         } else if (operationAllowed) {
