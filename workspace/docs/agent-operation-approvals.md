@@ -25,7 +25,7 @@ This document records design decisions, not a shipped capability.
 
 Use a separate operation-approval resource; existing conversational approvals are not execution capabilities. First runtime support is local macOS/Linux Codex with a verified read-only app-server environment. Unsupported runtime/platform fails closed in visitor DMs and never falls back to unrestricted execution. Owner's own conversations keep their existing behavior.
 
-HTTP base `/v1/operation-approvals`; all requests include `network`, all connector requests use the workspace credential and `X-Agent-Name`; decisions require a real signed-in human. API responses use existing `{code, data}` wrappers. Wire fields are snake_case.
+HTTP base `/v1/operation-approvals`; all requests include `network`, all connector requests use the workspace credential and `X-Agent-Name`; decisions require a real signed-in human. API responses use existing `{code, data}` wrappers. Wire fields are snake_case. List responses use `data: {requests: [...]}`; single/create/decision/result responses use `data: record`; claim returns `data: {...record, execution_token}`.
 
 - GET `/context?network=…&session_id=…`: connector-only; returns `{required, owner_email, visitor_email, paused}` after validating the canonical visitor-agent pair and active member. `required` means visitor differs from owner. A missing/failed context response must not permit unrestricted visitor DM execution.
 - POST base: connector creates `{network, session_id, request_key, operation:{kind:"move",root,source,destination,expected_state}}`. `root` is the configured absolute work root; `source` and `destination` are validated relative paths; `expected_state` is the connector's SHA-256 fingerprint of source and destination-parent state. Server freezes these values, computes a canonical operation digest, assigns owner from the agent record, and expires after 30 minutes. Same request key + same payload is idempotent; a different payload conflicts.
@@ -54,3 +54,11 @@ All tasks use this frozen contract and are independently executable; integration
 2. Trusted Codex operation execution + native no-overwrite helper + execution tests; owns agent-connector only.
 3. DM operation cards + pending owner affordance + interaction tests; owns workspace frontend only.
 4. Integrate, run local end-to-end verification, review and fix issues. No hosted production deployment is part of this change.
+
+## Protocol feasibility evidence
+
+Local Codex 0.151.0 app-server verified on macOS using a disposable workspace and isolated authentication/config directory: native writes denied; host-only credential-directory canary reads denied; real dynamic move request suspended without changing files; host approval/result continued the same turn; rejection left files unchanged; a real model shell-write attempt failed. An explicit escalation request was also received and declined in the read-only probe. These are protocol-level observations, not a claim that the production feature is complete.
+
+The restricted profile grants only minimal runtime reads, workspace reads and the real Codex binary directory, with command network access disabled and shell environment inheritance disabled. Spawn the canonical binary path: granting the canonical directory but spawning via a symlink caused helper startup to fail. Keep code_mode_host enabled for this CLI build; disabling it prevented the dynamic-tool request. External apps, multi-agent, remote-plugin and skill-MCP auto-install features were disabled. Code-mode command evidence appears in rawResponseItem events, not necessarily commandExecution items.
+
+Protocol references: https://learn.chatgpt.com/docs/app-server and https://learn.chatgpt.com/docs/permissions . Implementation tracking: https://github.com/MicroSharpAnt/openagents/issues/2 .
