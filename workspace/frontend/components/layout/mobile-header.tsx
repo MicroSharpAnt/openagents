@@ -1,4 +1,5 @@
 'use client';
+import { WorkspaceOperationApprovals } from './operation-approval-notifications';
 import { useOnboardingSurface, useDismissOnboarding } from './onboarding-surface';
 
 import {
@@ -115,6 +116,7 @@ export function MobileHeader() {
               threads list itself, where the new thread will show up — a global
               button here fired from Files or Browser and yanked you elsewhere. */}
           <div className="flex items-center gap-0.5 shrink-0 text-muted-foreground">
+            <WorkspaceOperationApprovals />
             <NotificationsMenu />
             <UserMenu />
           </div>

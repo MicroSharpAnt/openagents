@@ -1,4 +1,5 @@
 "use client"
+import { WorkspaceOperationApprovals } from './operation-approval-notifications';
 import { useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useWorkspace } from "@/lib/workspace-context"
@@ -209,6 +210,8 @@ export function AppHeader() {
           {title}
         </div>
       </div>
+
+      <WorkspaceOperationApprovals />
 
       {/* Filled by the active view through <AppHeaderActions> */}
       <div

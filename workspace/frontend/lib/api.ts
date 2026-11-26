@@ -1,3 +1,4 @@
+import type { OperationApproval, OperationDecision } from './operation-approvals';
 import { normalizePolicyRequirements } from './approvals';
 import { getApiBaseUrl, getProjectPreviewUrl } from '@/lib/api-base';
 import type { ProjectPreview, ProjectUpload } from './web-projects';
@@ -1993,6 +1994,24 @@ class WorkspaceApi {
       unreadCount: c.unread_count,
       readAt: c.read_at,
     }));
+  }
+
+  async listOperationApprovals(sessionId?: string): Promise<OperationApproval[]> {
+    const params = new URLSearchParams({ network: this.requireWorkspace() });
+    if (sessionId) params.set('session_id', sessionId);
+    const data = await this.request<{ requests: OperationApproval[] }>(`/v1/operation-approvals?${params}`);
+    return data.requests;
+  }
+
+  async getOperationApproval(id: string): Promise<OperationApproval> {
+    const params = new URLSearchParams({ network: this.requireWorkspace() });
+    return this.request(`/v1/operation-approvals/${encodeURIComponent(id)}?${params}`);
+  }
+
+  async decideOperationApproval(id: string, decision: OperationDecision): Promise<OperationApproval> {
+    return this.request(`/v1/operation-approvals/${encodeURIComponent(id)}/decision`, {
+      method: 'POST', body: JSON.stringify({ network: this.requireWorkspace(), decision }),
+    });
   }
 
   async directConversationState(sessionId: string): Promise<DirectConversationState> {
