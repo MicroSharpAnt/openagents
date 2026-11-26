@@ -71,6 +71,7 @@ export function OperationApprovals({ sessionId }: { sessionId: string }) {
         <dt>{t('operationApproval.expires')}</dt><dd><time dateTime={request.expires_at}>{new Date(request.expires_at).toLocaleString()}</time></dd>
       </dl>
       <p role="status" className="mt-2">{t(request.status === 'approved' && request.paused ? 'operationApproval.waitingForResume' : `operationApproval.${request.status}`)}</p>
+      {typeof request.result === 'string' && request.result && <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{request.result}</p>}
       <div className="mt-2 flex gap-2">
         {request.can_decide && <>
           <Button size="sm" disabled={busy !== null} onClick={() => void decide(request.id, 'approve')}>{t('operationApproval.approve')}</Button>
