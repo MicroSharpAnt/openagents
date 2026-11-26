@@ -10,7 +10,7 @@ export interface OperationApproval {
   status: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'invalidated' | 'rejected' | 'withdrawn' | 'expired';
   expires_at: string;
   created_at: string;
-  result: unknown;
+  result: string | null;
   paused: boolean;
   can_decide: boolean;
   can_withdraw: boolean;

@@ -61,3 +61,9 @@ it.each(['executing','succeeded','failed','invalidated','rejected','withdrawn','
   expect(host.textContent).toContain(`operationApproval.${status}`);
   expect(host.querySelector('button')).toBeNull();
 });
+it('shows the concrete execution result as text, including failure details', async () => {
+  api.list.mockResolvedValue([{ ...initial, status: 'failed', can_decide: false, result: 'Destination already exists: <img src=x onerror=alert(1)>' }]);
+  await act(async () => root.render(React.createElement(OperationApprovals, { sessionId: session })));
+  expect(host.textContent).toContain('Destination already exists: <img src=x onerror=alert(1)>');
+  expect(host.querySelector('img')).toBeNull();
+});
