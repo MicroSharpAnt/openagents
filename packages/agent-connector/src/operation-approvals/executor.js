@@ -71,9 +71,11 @@ class OperationExecutor {
       } catch (error) {
         if (error.statusCode !== 409) throw error;
         record = await this.api.get(record.id);
-        // Never retry executing/consumed or ambiguous claims. A paused approval
-        // proves this attempt was denied by takeover, and may wait for resume.
-        if (record.status !== 'approved' || !record.paused) throw error;
+        // The explicit non-grant permits retry only while still approved.
+        // Resume may race this read, so an unpaused result must not strand it.
+        if (record.status !== 'approved') throw error;
+        // Paused approvals wait above; pace already-resumed retries as well.
+        if (!record.paused) await new Promise(resolve => setTimeout(resolve, Math.max(1, Math.min(this.pollMs, deadline - Date.now()))));
       }
     }
     durableWrite(journal, { phase: 'claimed', id: record.id, operation });
