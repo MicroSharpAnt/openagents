@@ -10,7 +10,7 @@ People and their agents collaborate within a workspace.
 
 **Takeover**: The agent owner temporarily handles a visitor conversation while automatic agent replies are paused for that conversation. Viewing alone does not take over.
 
-**Resume**: The owner returns a taken-over conversation to automatic agent replies for new messages.
+**Resume**: The owner returns a taken-over conversation to automatic agent replies for new messages. A previously approved operation waiting on takeover may then continue without a new message, subject to its original expiry and execution checks.
 
 **Operation approval request**: An agent’s request for its owner to permit one specific operation on behalf of a visitor in their conversation. It identifies the intended action and its scope.
 

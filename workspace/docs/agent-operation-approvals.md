@@ -1,4 +1,4 @@
-# Agent operation approvals — design in progress
+# Agent operation approvals
 
 ## Confirmed behavior
 
@@ -19,7 +19,7 @@
 
 Verify a controlled Codex execution path that pauses before side effects, receives owner decisions, and enforces the approved scope. Prototype this boundary before committing to implementation of the approval UI. Existing unrestricted execution paths must not remain available to visitor-triggered runs under this policy.
 
-This document records design decisions, not a shipped capability.
+Implemented on `codex/owner-operation-approvals`. Local installation and hosted deployment are separate from the source implementation.
 
 ## Implementation contract (2026-11-26)
 
@@ -32,7 +32,7 @@ HTTP base `/v1/operation-approvals`; all requests include `network`, all connect
 - GET base with `network` and optional `session_id`: humans see only requests in their visitor conversations or their own agents' conversations; machines only their named agent. No workspace-admin override for human visibility.
 - GET `/{id}?network=…`: same visibility. Serialized record includes `id, session_id, agent_name, owner_email, visitor_email, operation, operation_digest, status, expires_at, created_at, result, paused, can_decide, can_withdraw`.
 - POST `/{id}/decision`: `{network, decision:"approve"|"reject"|"withdraw"}`. Only current owner can approve/reject a pending request; only original visitor can withdraw pending/approved, before execution claim. No role or bare workspace token bypass. Ownership change invalidates old approvals.
-- POST `/{id}/claim`: connector sends `{network,operation_digest}`. Single atomic transition approved→executing, only while unpaused and unexpired, ownership still matches. Returns a random `execution_token` once. Repeated/concurrent claims never grant another token; lost claim response must not trigger execution or automatic retry. An explicit HTTP 409 may be followed by a state read; only a still-approved, paused request may wait for resume and attempt another claim before expiry.
+- POST `/{id}/claim`: connector sends `{network,operation_digest}`. Single atomic transition approved→executing, only while unpaused and unexpired, ownership still matches. Returns a random `execution_token` once. Repeated/concurrent claims never grant another token; lost claim response must not trigger execution or automatic retry. An explicit HTTP 409 may be followed by a state read; only a still-approved request may attempt another claim before expiry, waiting while paused and using a bounded polling delay if already resumed. Executing/consumed requests and ambiguous transport failures must never retry.
 - POST `/{id}/result`: `{network,execution_token,status:"succeeded"|"failed"|"invalidated",result}`. Accept only the original claim token and agent. Result is a human-readable string of at most 4096 characters or null. Repeated identical result is idempotent; no result can grant another execution. Invalidated means relevant filesystem state changed; a fresh approval is required.
 - Pending/approved expiration must be applied on reads/decisions/claims. Executing records with lost completion are displayed as outcome unconfirmed; no automatic rerun.
 
@@ -57,8 +57,18 @@ All tasks use this frozen contract and are independently executable; integration
 
 ## Protocol feasibility evidence
 
-Local Codex 0.151.0 app-server verified on macOS using a disposable workspace and isolated authentication/config directory: native writes denied; host-only credential-directory canary reads denied; real dynamic move request suspended without changing files; host approval/result continued the same turn; rejection left files unchanged; a real model shell-write attempt failed. An explicit escalation request was also received and declined in the read-only probe. These are protocol-level observations, not a claim that the production feature is complete.
+Local Codex 0.151.0 app-server verified on macOS using a disposable workspace and isolated authentication/config directory: native writes denied; host-only credential-directory canary reads denied; real dynamic move request suspended without changing files; host approval/result continued the same turn; rejection left files unchanged; a real model shell-write attempt failed. An explicit escalation request was also received and declined in the read-only probe. The throwaway protocol prototype is preserved on `codex/prototype-operation-approvals` at `14a645f0`; production execution is independently covered by filesystem and end-to-end checks.
 
 The restricted profile grants only minimal runtime reads, workspace reads and the real Codex binary directory, with command network access disabled and shell environment inheritance disabled. Spawn the canonical binary path: granting the canonical directory but spawning via a symlink caused helper startup to fail. Keep code_mode_host enabled for this CLI build; disabling it prevented the dynamic-tool request. External apps, multi-agent, remote-plugin and skill-MCP auto-install features were disabled. Code-mode command evidence appears in rawResponseItem events, not necessarily commandExecution items.
 
 Protocol references: https://learn.chatgpt.com/docs/app-server and https://learn.chatgpt.com/docs/permissions . Implementation tracking: https://github.com/MicroSharpAnt/openagents/issues/2 .
+
+## Validation and delivery status
+
+- Frontend full suite: 1,277 passed; desktop production bundle builds.
+- Backend full suite: 2,451 passed, 31 failed, 78 skipped, 6 errors. The same 31 failures and 6 errors reproduce on the pre-feature baseline (2,444 passed); no new failing case. Focused approval/owner tests pass.
+- Connector approval/runtime/dispatch tests pass. The wider connector run retains two reproduced baseline failures (DeepSeek binary resolution and Claude sign-in readiness); missing worktree dependencies were repaired before rerunning affected groups.
+- Isolated PostgreSQL migration chain 001–104 passes. Three-account browser checks cover owner-only decisions, visitor withdrawal, unrelated-user denial, takeover/resume, real native directory movement, rejection, changed-state invalidation, duplicate prevention and eight concurrent execution claims with exactly one winner. Pending notifications navigate to the matching conversation.
+- Real Codex app-server execution was checked after the runtime refactor, including waiting for approval, a single claim, native movement and completion reporting.
+
+This feature requires backend migration 104, the updated frontend, and the updated connector together. The existing local app/backend installation has not been upgraded by these source implementation checks. First support is native local Codex on macOS/Linux; unsupported visitor runtimes fail closed. Custom provider endpoints and script/WSL Codex wrappers are not supported in this first release.
