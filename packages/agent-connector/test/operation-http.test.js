@@ -60,3 +60,16 @@ for (const consumed of [false, true]) {
     assert.equal(fs.existsSync(path.join(f.root, 'after')), false);
   });
 }
+test('resume between denied claim and reconciliation still executes exactly once', async t => {
+  let claims = 0, reads = 0;
+  const f = await fixture(t, (req, body, reply) => {
+    if (req.url.endsWith('/claim')) return ++claims === 1 ? reply({}, 409) : reply({ execution_token: 'once' });
+    if (req.method === 'GET') { reads++; return reply(approved); }
+    reply(approved);
+  });
+  assert.equal((await f.run()).status, 'succeeded');
+  assert.equal(claims, 2);
+  assert.equal(reads, 1);
+  assert.equal(fs.readFileSync(path.join(f.root, 'after'), 'utf8'), 'keep');
+  assert.equal(fs.existsSync(path.join(f.root, 'before')), false);
+});
