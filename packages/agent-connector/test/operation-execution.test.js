@@ -109,3 +109,8 @@ test('runtime configuration cannot be renamed into or out of the work root', asy
   await assert.rejects(f.make().requestMove({ source: 'snake-game', destination: '.git', sessionId: 'dm:v:a', requestKey: 'metadata' }));
   assert.equal(f.record(), undefined);
 });
+test('filesystem root cannot be used as a visitor work root', async t => {
+  const f = fixture(t);
+  const executor = new OperationExecutor({ root: '/', journalDir: path.join(f.root, 'journal'), api: f.api });
+  await assert.rejects(executor.requestMove({ source: 'not-present', destination: 'also-not-present', sessionId: 'dm:v:a', requestKey: 'filesystem-root' }), /credentials|journal/i);
+});

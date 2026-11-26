@@ -11,7 +11,7 @@ const MOVE_TOOL = {
   description: 'Request one owner-approved move or rename inside the working root. The trusted host waits for the owner and executes it. Never execute it yourself.',
   inputSchema: { type: 'object', properties: { source: { type: 'string' }, destination: { type: 'string' } }, required: ['source', 'destination'], additionalProperties: false },
 };
-const inside = (root, file) => file === root || file.startsWith(root + path.sep);
+const inside = (root, file) => root === path.parse(root).root || file === root || file.startsWith(root + path.sep);
 
 /** One fresh, isolated thread per visitor run; never resumes an unrestricted owner thread. */
 async function runControlledCodex({ bin, root, env = process.env, model, customProvider, prompt, executor, sessionId, onProcess = () => {} }) {
