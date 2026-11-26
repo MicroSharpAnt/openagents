@@ -2030,3 +2030,24 @@ class OAuthAuthorizationCode(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now, server_default=text("NOW()"))
+
+
+class OperationApproval(Base):
+    """A frozen single-operation capability, separate from conversational approvals."""
+    __tablename__ = 'operation_approvals'
+    id = Column(Text, primary_key=True, default=_uuid)
+    workspace_id = Column(UUID(as_uuid=False), ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False)
+    session_id = Column(Text, nullable=False)
+    agent_name = Column(Text, nullable=False)
+    owner_email = Column(Text, nullable=False)
+    visitor_email = Column(Text, nullable=False)
+    request_key = Column(Text, nullable=False)
+    operation = Column(JSONB, nullable=False)
+    operation_digest = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default='pending')
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    execution_token_hash = Column(Text)
+    result = Column(JSONB)
+    __table_args__ = (UniqueConstraint('workspace_id', 'agent_name', 'request_key'),
+                     Index('ix_operation_approvals_workspace_session', 'workspace_id', 'session_id'))
