@@ -1,5 +1,6 @@
 'use client';
 
+import { OperationApprovals } from './operation-approvals';
 import { DirectConversationControls, useDirectConversation } from './direct-conversation-controls';
 import { ThreadLiveBrowser } from './thread-live-browser';
 import { AgentMessageAccessProvider } from './agent-message-access';
@@ -175,6 +176,7 @@ export function ChatView() {
         onEditRoutine={setEditingRoutine}
       />
       {isDM && <DirectConversationControls conversation={conversation} />}
+      {isDM && currentSessionId && currentUser.isAuthenticated && <OperationApprovals key={`${workspaceKey}:${currentUser.id}:${currentSessionId}`} sessionId={currentSessionId} />}
       <ThreadResources key={currentSessionId} messages={browserMessages} queueMessages={displayMessages} pendingQueue={sessionPendingQueue} />
 
       {workspace && workspaceToken && !workspace.creatorEmail

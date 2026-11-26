@@ -11,6 +11,7 @@
  */
 
 export const messages = {
+  operationApproval: {"title": "File move approval", "owner": "Agent owner", "requester": "Requester", "root": "Work root", "source": "Source", "destination": "Destination", "expires": "Expires", "approve": "Approve once", "reject": "Reject", "withdraw": "Withdraw", "pending": "Waiting for owner approval", "approved": "Approved · waiting for execution", "waitingForResume": "Waiting for agent resume", "executing": "Execution claimed · outcome unconfirmed", "succeeded": "Move completed", "failed": "Move failed", "invalidated": "Filesystem changed · a fresh approval is required", "rejected": "Rejected", "withdrawn": "Withdrawn", "expired": "Expired", "pendingCount": "Operation approvals ({count})"},
   agentConversation: {"ownerHint": "You are replying as the agent owner in this visitor’s conversation.", "notice": "The agent owner can view and participate in this conversation.", "paused": "The owner is handling this conversation. Automatic replies are paused.", "automatic": "Automatic agent replies are on.", "takeOver": "Take over", "resume": "Resume agent", "ownerBadge": "Agent owner"},
   routineHub: {
     heading: "Workspace routines",
