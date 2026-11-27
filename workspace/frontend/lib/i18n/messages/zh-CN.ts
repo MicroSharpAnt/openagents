@@ -5,7 +5,7 @@ import type { Messages } from './en-US';
  * one that no longer exists in English — fails the build.
  */
 export const messages: Messages = {
-  operationApproval: {"title": "文件移动审批", "owner": "代理所有者", "requester": "请求人", "root": "工作根目录", "source": "源路径", "destination": "目标路径", "expires": "到期时间", "approve": "仅批准此次", "reject": "拒绝", "withdraw": "撤回", "pending": "等待所有者批准", "approved": "已批准 · 等待执行", "waitingForResume": "等待恢复代理", "executing": "已领取执行 · 结果尚未确认", "succeeded": "移动已完成", "failed": "移动失败", "invalidated": "文件系统已变化 · 需要重新审批", "rejected": "已拒绝", "withdrawn": "已撤回", "expired": "已过期", "pendingCount": "操作审批（{count}）"},
+  operationApproval: {"activeCount": "未完成 {count} 项", "completed": "全部已结束", "expand": "展开", "collapse": "收起", "title": "文件移动审批", "owner": "代理所有者", "requester": "请求人", "root": "工作根目录", "source": "源路径", "destination": "目标路径", "expires": "到期时间", "approve": "仅批准此次", "reject": "拒绝", "withdraw": "撤回", "pending": "等待所有者批准", "approved": "已批准 · 等待执行", "waitingForResume": "等待恢复代理", "executing": "已领取执行 · 结果尚未确认", "succeeded": "移动已完成", "failed": "移动失败", "invalidated": "文件系统已变化 · 需要重新审批", "rejected": "已拒绝", "withdrawn": "已撤回", "expired": "已过期", "pendingCount": "操作审批（{count}）"},
   agentConversation: {"ownerHint": "你将以智能体创建者的身份参与这位访客的对话。", "notice": "智能体创建者可查看并参与本对话。", "paused": "创建者已接管，智能体自动回复已暂停。", "automatic": "智能体自动回复已开启。", "takeOver": "接管对话", "resume": "恢复智能体", "ownerBadge": "智能体创建者"},
   routineHub: {
     heading: "工作区定时任务",

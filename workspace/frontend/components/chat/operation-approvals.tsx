@@ -5,6 +5,7 @@ import { workspaceApi } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import type { OperationApproval, OperationDecision } from '@/lib/operation-approvals';
 import { Button } from '@/components/ui/button';
+import { ChevronDown } from 'lucide-react';
 
 export function useOperationApprovals(sessionId?: string) {
   const [requests, setRequests] = useState<OperationApproval[]>([]);
@@ -57,28 +58,42 @@ export function useOperationApprovals(sessionId?: string) {
 export function OperationApprovals({ sessionId }: { sessionId: string }) {
   const t = useT();
   const { requests, error, busy, decide } = useOperationApprovals(sessionId);
+  const activeIds = requests.filter(request => ['pending', 'approved', 'executing'].includes(request.status)).map(request => request.id).sort();
+  const expansionKey = JSON.stringify([sessionId, activeIds, Boolean(error)]);
+  const [expansion, setExpansion] = useState<{ key: string; open: boolean } | null>(null);
+  const expanded = expansion?.key === expansionKey ? expansion.open : activeIds.length > 0 || Boolean(error);
   if (!requests.length && !error) return null;
-  return <section aria-label={t('operationApproval.title')} className="max-h-72 shrink-0 overflow-y-auto border-b border-border px-4 py-2 text-xs">
-    {error && <p role="alert" className="text-destructive">{error}</p>}
-    {requests.map(request => <article key={request.id} className="my-2 rounded-lg border border-border p-3">
-      <h3 className="font-medium">{t('operationApproval.title')} · {request.agent_name}</h3>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all">
-        <dt>{t('operationApproval.owner')}</dt><dd>{request.owner_email}</dd>
-        <dt>{t('operationApproval.requester')}</dt><dd>{request.visitor_email}</dd>
-        <dt>{t('operationApproval.root')}</dt><dd className="font-mono whitespace-pre-wrap">{request.operation.root}</dd>
-        <dt>{t('operationApproval.source')}</dt><dd className="font-mono whitespace-pre-wrap">{request.operation.source}</dd>
-        <dt>{t('operationApproval.destination')}</dt><dd className="font-mono whitespace-pre-wrap">{request.operation.destination}</dd>
-        <dt>{t('operationApproval.expires')}</dt><dd><time dateTime={request.expires_at}>{new Date(request.expires_at).toLocaleString()}</time></dd>
-      </dl>
-      <p role="status" className="mt-2">{t(request.status === 'approved' && request.paused ? 'operationApproval.waitingForResume' : `operationApproval.${request.status}`)}</p>
-      {typeof request.result === 'string' && request.result && <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{request.result}</p>}
-      <div className="mt-2 flex gap-2">
-        {request.can_decide && <>
-          <Button size="sm" disabled={busy !== null} onClick={() => void decide(request.id, 'approve')}>{t('operationApproval.approve')}</Button>
-          <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void decide(request.id, 'reject')}>{t('operationApproval.reject')}</Button>
-        </>}
-        {request.can_withdraw && <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void decide(request.id, 'withdraw')}>{t('operationApproval.withdraw')}</Button>}
+  return <section aria-label={t('operationApproval.title')} className="shrink-0 border-b border-border text-xs">
+    <details open={expanded}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden" onClick={event => { event.preventDefault(); setExpansion({ key: expansionKey, open: !expanded }); }}>
+        <ChevronDown aria-hidden="true" className={`size-4 shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+        <span className="font-medium">{t('operationApproval.pendingCount', { count: requests.length })}</span>
+        <span className="text-muted-foreground">{activeIds.length ? t('operationApproval.activeCount', { count: activeIds.length }) : t('operationApproval.completed')}</span>
+        <span className="ml-auto text-muted-foreground">{t(expanded ? 'operationApproval.collapse' : 'operationApproval.expand')}</span>
+      </summary>
+      <div className="max-h-72 overflow-y-auto px-4 pb-2">
+        {requests.map(request => <article key={request.id} className="my-2 rounded-lg border border-border p-3">
+          <h3 className="font-medium">{t('operationApproval.title')} · {request.agent_name}</h3>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all">
+            <dt>{t('operationApproval.owner')}</dt><dd>{request.owner_email}</dd>
+            <dt>{t('operationApproval.requester')}</dt><dd>{request.visitor_email}</dd>
+            <dt>{t('operationApproval.root')}</dt><dd className="font-mono whitespace-pre-wrap">{request.operation.root}</dd>
+            <dt>{t('operationApproval.source')}</dt><dd className="font-mono whitespace-pre-wrap">{request.operation.source}</dd>
+            <dt>{t('operationApproval.destination')}</dt><dd className="font-mono whitespace-pre-wrap">{request.operation.destination}</dd>
+            <dt>{t('operationApproval.expires')}</dt><dd><time dateTime={request.expires_at}>{new Date(request.expires_at).toLocaleString()}</time></dd>
+          </dl>
+          <p role="status" className="mt-2">{t(request.status === 'approved' && request.paused ? 'operationApproval.waitingForResume' : `operationApproval.${request.status}`)}</p>
+          {typeof request.result === 'string' && request.result && <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{request.result}</p>}
+          <div className="mt-2 flex gap-2">
+            {request.can_decide && <>
+              <Button size="sm" disabled={busy !== null} onClick={() => void decide(request.id, 'approve')}>{t('operationApproval.approve')}</Button>
+              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void decide(request.id, 'reject')}>{t('operationApproval.reject')}</Button>
+            </>}
+            {request.can_withdraw && <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void decide(request.id, 'withdraw')}>{t('operationApproval.withdraw')}</Button>}
+          </div>
+        </article>)}
       </div>
-    </article>)}
+    </details>
+    {error && <p role="alert" className="px-4 pb-2 text-destructive">{error}</p>}
   </section>;
 }

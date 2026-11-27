@@ -67,3 +67,37 @@ it('shows the concrete execution result as text, including failure details', asy
   expect(host.textContent).toContain('Destination already exists: <img src=x onerror=alert(1)>');
   expect(host.querySelector('img')).toBeNull();
 });
+it('keeps manual collapse across polls and opens new pending requests', async () => {
+  vi.useFakeTimers();
+  await act(async () => root.render(React.createElement(OperationApprovals, { sessionId: session })));
+  expect(host.querySelector('details')!.open).toBe(true);
+  await act(async () => host.querySelector('summary')!.click());
+  expect(host.querySelector('details')!.open).toBe(false);
+  await act(async () => vi.advanceTimersByTime(5000));
+  expect(host.querySelector('details')!.open).toBe(false);
+  expect(api.decide).not.toHaveBeenCalled();
+  api.list.mockResolvedValue([initial, { ...initial, id: 'new-request' }]);
+  await act(async () => vi.advanceTimersByTime(5000));
+  expect(host.querySelector('details')!.open).toBe(true);
+  api.list.mockResolvedValue([{ ...initial, status: 'succeeded', can_decide: false }]);
+  await act(async () => vi.advanceTimersByTime(5000));
+  expect(host.querySelector('details')!.open).toBe(false);
+});
+it('collapses finished history by default and lets the user inspect the result', async () => {
+  api.list.mockResolvedValue([{ ...initial, status: 'succeeded', can_decide: false, result: 'Moved old.txt to new.txt' }]);
+  await act(async () => root.render(React.createElement(OperationApprovals, { sessionId: session })));
+  expect(host.querySelector('details')!.open).toBe(false);
+  expect(host.querySelector('summary')!.textContent).toContain('operationApproval.completed');
+  await act(async () => host.querySelector('summary')!.click());
+  expect(host.querySelector('details')!.open).toBe(true);
+  expect(host.querySelector('article')!.textContent).toContain('Moved old.txt to new.txt');
+});
+it('keeps errors visible when the approval details are collapsed', async () => {
+  api.decide.mockRejectedValue(new Error('Request expired'));
+  await act(async () => root.render(React.createElement(OperationApprovals, { sessionId: session })));
+  await act(async () => host.querySelector('article button')!.click());
+  await act(async () => host.querySelector('summary')!.click());
+  expect(host.querySelector('details')!.open).toBe(false);
+  expect(host.querySelector('[role=alert]')!.closest('details')).toBeNull();
+  expect(host.querySelector('[role=alert]')!.textContent).toBe('Request expired');
+});
