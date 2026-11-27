@@ -24,7 +24,7 @@ from app.services.routine_backoff import ROUTINE_STUCK_MS
 # Registers the commit hooks that invalidate cached permission results; it must
 # load before any request can write permission rows.
 import app.services.permission_cache  # noqa: E402,F401
-from app.routers import guest_links, imported_sessions, personal_settings, hub, mcp, oauth, public_shares, web_projects, reactions, agent_services, account, agent_profile, app_version, approvals, auth, briefs, browser, cloud_agents, devices, hosted_agents, events, feedback, fetch, files, grants, groups, integrations, invites, issues, knowledge, model_access, network, nodes, notifications, onboarding, read_state, registry, routines, search, shares, sharing, tasks, thread_access, timers, todos, watches, workflows, workspaces
+from app.routers import local_auth, guest_links, imported_sessions, personal_settings, hub, mcp, oauth, public_shares, web_projects, reactions, agent_services, account, agent_profile, app_version, approvals, auth, briefs, browser, cloud_agents, devices, hosted_agents, events, feedback, fetch, files, grants, groups, integrations, invites, issues, knowledge, model_access, network, nodes, notifications, onboarding, read_state, registry, routines, search, shares, sharing, tasks, thread_access, timers, todos, watches, workflows, workspaces
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -739,6 +739,7 @@ app.include_router(thread_access.router)
 app.include_router(agent_profile.router)
 app.include_router(briefs.router)
 app.include_router(auth.router)
+app.include_router(local_auth.router)
 app.include_router(browser.router)
 app.include_router(cloud_agents.router)
 app.include_router(hosted_agents.router)

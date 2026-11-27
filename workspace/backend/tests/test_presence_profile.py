@@ -239,6 +239,39 @@ class TestSharedContext:
         r = _shared_context(client, workspace, "deploy-bot", _tok(workspace), requester_email="vic@acme.test")
         assert r.status_code == 200, r.text
 
+    def test_paired_device_reads_shared_context_and_revocation_takes_effect(self, client, workspace, specialist, db):
+        node = Node(workspace_id=workspace["id"], owner_email="mia@acme.test",
+                    node_key="shared-context-device", token="device-context-token")
+        db.add(node)
+        db.commit()
+        headers = {"X-Workspace-Token": node.token}
+        r = _shared_context(client, workspace, "deploy-bot", headers, requester_email="vic@acme.test")
+        assert r.status_code == 200, r.text
+        assert r.json()["data"]["apply"] is True
+        assert r.json()["data"]["shared_instructions"] == LONG_INSTRUCTIONS
+        assert r.json()["data"]["allowed_knowledge"][0]["slug"] == specialist["slug"]
+        db.delete(node)
+        db.commit()
+        assert _shared_context(client, workspace, "deploy-bot", headers).status_code == 403
+
+    @pytest.mark.parametrize("credential", ["other_workspace", "limited", "invalid", "missing"])
+    def test_device_context_rejects_untrusted_credentials(self, client, workspace, specialist, db, credential):
+        headers = {}
+        if credential in ("other_workspace", "limited"):
+            wid = workspace["id"]
+            if credential == "other_workspace":
+                wid = client.post("/v1/workspaces", json={"name": "Other"}).json()["data"]["workspaceId"]
+            node = Node(workspace_id=wid, owner_email="mia@acme.test", node_key="context-denied",
+                        token="denied-context-token", scope_channel="limited-thread" if credential == "limited" else None,
+                        scope_agent="deploy-bot" if credential == "limited" else None)
+            db.add(node)
+            db.commit()
+            headers = {"X-Workspace-Token": node.token}
+        elif credential == "invalid":
+            headers = {"X-Workspace-Token": "not-a-valid-token"}
+        assert _shared_context(client, workspace, "deploy-bot", headers,
+                               requester_email="vic@acme.test").status_code == 403
+
     def test_owner_request_does_not_apply(self, client, workspace, specialist):
         d = _shared_context(client, workspace, "deploy-bot", _tok(workspace), requester_email="Mia@Acme.test").json()["data"]
         assert d["apply"] is False

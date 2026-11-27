@@ -468,3 +468,32 @@ describe("AccountManager email authentication", () => {
     expect(service.calls).toHaveLength(0)
   })
 })
+
+describe("opt-in local password login", () => {
+  afterEach(() => vi.unstubAllEnvs())
+  it("uses only the configured workspace and stores a renewable session", async () => {
+    vi.stubEnv("OPENAGENTS_LOCAL_AUTH", "1")
+    const fetch = vi.fn(async (_url: string, _init?: RequestInit) => ({ok: true, status: 200, json: async () => ({data: {
+      session_token: SESSION.token, email: SESSION.email, display_name: SESSION.displayName,
+      expires_at: new Date(SESSION.expiresAt * 1000).toISOString(),
+    }})}))
+    vi.stubGlobal("fetch", fetch)
+    const manager = new AccountManager({endpoint: () => "http://127.0.0.1:8000", openExternal: vi.fn(), onChange: vi.fn()})
+    await manager.signInWithPassword(SESSION.email, "local-password")
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls[0][0]).toBe("http://127.0.0.1:8000/v1/auth/local-session")
+    expect(stored?.kind).toBe("workspace")
+    expect(manager.getAccount()?.email).toBe(SESSION.email)
+    await expect(manager.signUpWithPassword(SESSION.email, "local-password")).rejects.toThrow("provisioned")
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it("never falls back to an external identity service after rejection", async () => {
+    vi.stubEnv("OPENAGENTS_LOCAL_AUTH", "1")
+    const fetch = vi.fn(async () => ({ok:false,status:401}))
+    vi.stubGlobal("fetch", fetch)
+    const manager = new AccountManager({endpoint: () => "http://127.0.0.1:8000", openExternal: vi.fn(), onChange: vi.fn()})
+    await expect(manager.signInWithPassword(SESSION.email,"wrong")).rejects.toThrow("SIGN_IN_BAD_CREDENTIALS")
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(stored).toBeNull()
+  })
+})

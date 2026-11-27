@@ -273,13 +273,18 @@ def agent_shared_context(
     then prepends the shared instructions + allowed knowledge to the prompt
     and tells the agent to stay inside them.
     """
-    from app.services.visibility import is_machine_caller
+    from app.access import resolve_machine_token
 
     workspace = _resolve_workspace(db, network)
     if not workspace:
         return json_response(ResponseCode.NOT_FOUND, "Network not found")
-    if not is_machine_caller(workspace, x_workspace_token):
-        return json_response(ResponseCode.FORBIDDEN, "shared-context is for the agent runtime (workspace token) only")
+    # Pairing gives the connector a device token, not the legacy workspace
+    # token. Resolve both credential classes centrally, without admitting human
+    # sessions or upgrading a guest's thread-scoped device to workspace access.
+    credential_workspace, node = resolve_machine_token(db, x_workspace_token)
+    if (credential_workspace is None or credential_workspace.id != workspace.id
+            or (node is not None and node.scope_channel)):
+        return json_response(ResponseCode.FORBIDDEN, "shared-context requires a workspace or unrestricted device token")
 
     member = _load_member(db, workspace, agent)
     if member is None:

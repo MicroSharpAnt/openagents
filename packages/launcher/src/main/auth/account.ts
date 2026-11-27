@@ -155,6 +155,7 @@ export class AccountManager {
    * session there is usually what makes this one click.
    */
   async signIn(): Promise<AccountInfo> {
+    if (process.env.OPENAGENTS_LOCAL_AUTH === "1") throw new Error("Use the local email and password to sign in")
     // A second click while one is in flight replaces it — the first browser tab
     // is already stale, and leaving its port open would be a second live gate.
     this.cancelSignIn()
@@ -231,6 +232,7 @@ export class AccountManager {
    * form turns that into a retry with the widget.
    */
   async captchaConfig(): Promise<CaptchaConfig> {
+    if (process.env.OPENAGENTS_LOCAL_AUTH === "1") return CAPTCHA_DISABLED
     const cached = this._captchaConfig
     if (cached && Date.now() - cached.at < CAPTCHA_CONFIG_TTL_MS) return cached.value
     let value = CAPTCHA_DISABLED
@@ -279,6 +281,27 @@ export class AccountManager {
     // live gates would race to be the session.
     this.cancelSignIn()
 
+    if (process.env.OPENAGENTS_LOCAL_AUTH === "1") {
+      const endpoint = this._deps.endpoint()
+      if (!endpoint) throw new Error("Configure a workspace endpoint for local login")
+      const res = await authFetch(`${apiBase(endpoint)}/v1/auth/local-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      if (res.status === 401) throw new Error(BAD_CREDENTIALS)
+      const json = await res.json() as { data?: { session_token: string; email: string; display_name?: string; expires_at: string }; message?: string }
+      const data = json.data
+      if (!res.ok || !data?.session_token || !data.email || !Number.isFinite(Date.parse(data.expires_at)))
+        throw new Error(json.message || "Local login failed")
+      const session: AccountSession = {
+        kind: "workspace", token: data.session_token, email: data.email,
+        displayName: data.display_name ?? null, expiresAt: Date.parse(data.expires_at) / 1000,
+      }
+      this._set(session)
+      return toAccountInfo(session)
+    }
+
     let session: AccountSession
     try {
       session = await this._passwordSession(email, password, captcha)
@@ -297,6 +320,7 @@ export class AccountManager {
     displayName?: string,
     captcha?: CaptchaPass,
   ): Promise<AccountInfo> {
+    if (process.env.OPENAGENTS_LOCAL_AUTH === "1") throw new Error("Local accounts are provisioned by the server operator")
     const normalizedEmail = email.trim().toLowerCase()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
       throw new Error("SIGN_UP_INVALID_EMAIL")
@@ -330,6 +354,27 @@ export class AccountManager {
 
     // Registration already succeeded. If opening Workspace fails, the UI must
     // offer sign-in rather than ask the user to create the same account again.
+    if (process.env.OPENAGENTS_LOCAL_AUTH === "1") {
+      const endpoint = this._deps.endpoint()
+      if (!endpoint) throw new Error("Configure a workspace endpoint for local login")
+      const res = await authFetch(`${apiBase(endpoint)}/v1/auth/local-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      if (res.status === 401) throw new Error(BAD_CREDENTIALS)
+      const json = await res.json() as { data?: { session_token: string; email: string; display_name?: string; expires_at: string }; message?: string }
+      const data = json.data
+      if (!res.ok || !data?.session_token || !data.email || !Number.isFinite(Date.parse(data.expires_at)))
+        throw new Error(json.message || "Local login failed")
+      const session: AccountSession = {
+        kind: "workspace", token: data.session_token, email: data.email,
+        displayName: data.display_name ?? null, expiresAt: Date.parse(data.expires_at) / 1000,
+      }
+      this._set(session)
+      return toAccountInfo(session)
+    }
+
     let session: AccountSession
     try {
       if (!json.data?.access_token) throw new Error("Missing account token")
